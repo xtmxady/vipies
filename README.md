@@ -102,6 +102,7 @@ Menu interaktif `setup.sh`:
 | 9 | 08-monitoring | Monitoring + Telegram |
 | 10 | 09-autorestart | Auto-restart service |
 | 11 | 10-permission | Auto-fix permission |
+| 12 | 11-newsite | Helper new-site (bikin WP cepat) |
 
 ## 🛠️ Helper CLI setelah install
 
@@ -118,6 +119,11 @@ vipies-db rootpass newrootpass           # ganti pass root
 
 # Monitoring manual
 vipies-monitor
+
+# Buat situs WordPress baru lengkap (Nginx + DB + WP install + permission)
+vipies-new-site example.com
+# Optional: tentukan DB/user/pass sendiri
+vipies-new-site example.com wpmydb myuser mypass
 ```
 
 ## 📄 Konfigurasi (.env)
