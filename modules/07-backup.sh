@@ -20,14 +20,45 @@ fi
 ok "rclone $(rclone --version | head -1 | grep -oE '[0-9.]+') terinstall"
 
 step "Memeriksa konfigurasi remote rclone ($R2_REMOTE_NAME -> $R2_BUCKET)..."
+# Auto-create remote rclone dari .env bila credentials tersedia
 if ! rclone lsd "${R2_REMOTE_NAME}:" >/dev/null 2>&1; then
-  warn "Remote '$R2_REMOTE_NAME' belum dikonfigurasi."
-  warn "Jalankan: rclone config (provider S3, R2 Cloudflare)"
-  warn "Atau isi .env dengan R2 token lalu jalankan:"
-  echo "  rclone config create $R2_REMOTE_NAME s3 provider 'Cloudflare' \\"
-  echo "    access_key_id 'AKID' secret_access_key 'SECRET' \\"
-  echo "    endpoint 'https://<ACCOUNT>.r2.cloudflarestorage.com'"
-  return 0 2>/dev/null || exit 0
+  if [ -n "${R2_ACCOUNT_ID:-}" ] && [ -n "${R2_ACCESS_KEY_ID:-}" ] && [ -n "${R2_SECRET_ACCESS_KEY:-}" ]; then
+    ok "Membuat remote rclone '$R2_REMOTE_NAME' dari .env..."
+    rclone config create "$R2_REMOTE_NAME" s3 \
+      provider "Cloudflare" \
+      access_key_id "${R2_ACCESS_KEY_ID}" \
+      secret_access_key "${R2_SECRET_ACCESS_KEY}" \
+      endpoint "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+      >/dev/null 2>&1
+    rclone lsd "${R2_REMOTE_NAME}:" >/dev/null 2>&1 \
+      && ok "Remote '$R2_REMOTE_NAME' dibuat & terhubung" \
+      || warn "Remote dibuat tapi belum terhubung — cek credentials"
+  else
+    warn "Remote '$R2_REMOTE_NAME' belum dikonfigurasi & R2 credentials kosong di .env."
+    warn "Isi .env: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, lalu jalankan ulang modul 07."
+  fi
+fi
+
+step "Memastikan r2-sites.conf (fallback DB config)..."
+# Auto-scan /var/www/ untuk situs WordPress (DB dari wp-config) & custom
+# User bisa menambah baris manual: <site>|<db>|<user>|<pass> bila DB bukan dari .env
+if [ ! -f /root/r2-sites.conf ]; then
+  : > /root/r2-sites.conf
+  for webdir in /var/www/*/; do
+    site=$(basename "$webdir" | tr -d '/')
+    [ -d "$webdir/wp-content" ] || continue
+    # Skip adminer/html
+    case "$site" in adminer|html) continue;; esac
+    if [ -f "$webdir/wp-config.php" ]; then
+      db=$(grep "DB_NAME" "$webdir/wp-config.php" | head -1 | cut -d"'" -f4)
+      du=$(grep "DB_USER" "$webdir/wp-config.php" | head -1 | cut -d"'" -f4)
+      dp=$(grep "DB_PASSWORD" "$webdir/wp-config.php" | head -1 | cut -d"'" -f4)
+      [ -n "$db" ] && echo "${site}|${db}|${du}|${dp}" >> /root/r2-sites.conf
+    fi
+  done
+  ok "r2-sites.conf dibuat (auto-scan dari wp-config.php)"
+else
+  ok "r2-sites.conf sudah ada"
 fi
 
 step "Memasang script backup + cron..."

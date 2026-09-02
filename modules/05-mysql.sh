@@ -15,18 +15,27 @@ ok "MySQL terinstall: $(mysql --version | grep -oE '[0-9.]+' | head -1)"
 
 # --- Set root password ---
 step "Mengatur password root MySQL..."
+# Fresh Ubuntu MySQL: root pakai auth_socket (login tanpa password via socket).
+# Di sini kita set password + tulis /root/.my.cnf supaya helper/backup bisa akses.
 if [ -n "${MYSQL_ROOT_PASSWORD:-}" ]; then
-  # Pakai socket auth untuk set password
-  mysql -u root <<SQL
-ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY '${MYSQL_ROOT_PASSWORD}';
-FLUSH PRIVILEGES;
-SQL
-  ok "Password root di-set (dari .env)"
+  ROOTPASS="$MYSQL_ROOT_PASSWORD"
 else
-  echo -n "  Masukkan password root MySQL: "; read -rs rootpass; echo ""
-  mysql -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY '${rootpass}'; FLUSH PRIVILEGES;"
-  MYSQL_ROOT_PASSWORD="$rootpass"
-  ok "Password root di-set"
+  echo -n "  Masukkan password root MySQL: "; read -rs ROOTPASS; echo ""
+fi
+
+if [ -z "$ROOTPASS" ]; then
+  warn "Password kosong — biarkan root pakai auth_socket."
+else
+  mysql -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY '${ROOTPASS}'; FLUSH PRIVILEGES;" 2>/dev/null \
+    || warn "Set password gagal (cek apakah root pakai auth_socket, coba sesuaikan)"
+  # Simpan credential agar helper/backup via CLI tanpa tanya password
+  cat > /root/.my.cnf <<CNF
+[client]
+user=root
+password=${ROOTPASS}
+CNF
+  chmod 600 /root/.my.cnf
+  ok "Password root di-set + tersimpan di /root/.my.cnf (aman, chmod 600)"
 fi
 
 # --- Helper CLI: vipies-db ---
