@@ -55,9 +55,17 @@ RAM_TOT=$(free -m | awk '/^Mem:/{printf "%d", $2}')
 DISK_USED=$(df / | awk 'NR==2{print $5}')
 LOAD=$(uptime | grep -oE 'load average:.*' | sed 's/load average: //')
 
-# Cek status backup (jika ada log backup terakhir)
+# Cek status backup R2 terakhir (dari report backup harian)
 BACKUP_TXT=""
-[ -f /root/backup-report.txt ] && BACKUP_TXT="\nLast backup: $(tail -3 /root/backup-report.txt | tr '\n' ' ')"
+if [ -f /root/backup-report.txt ]; then
+  # Deteksi tanda gagal pada 15 baris terakhir report
+  if grep -q "⚠️\|gagal\|error" /root/backup-report.txt 2>/dev/null; then
+    ALERTS+="🟠 <b>Backup R2</b>: ada komponen gagal (cek log)\n"
+  fi
+  LAST=$(grep -E "\.sql\.gz|\.zip" /root/backup-report.txt | tail -6 | sed 's/^[0-9-]* [0-9:]* | *//' | tr '\n' ' ')
+  BACKUP_TXT="
+📦 <b>Backup R2 terakhir</b>: $LAST"
+fi
 
 if [ -n "$ALERTS" ]; then
   MSG="⚠️ <b>MONITOR VIPIES</b> [ALARM]\n$ALERTS\nRAM: ${RAM_USED}/${RAM_TOT}MB | Disk: $DISK_USED | Load: $LOAD$BACKUP_TXT"
