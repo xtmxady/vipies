@@ -31,6 +31,67 @@ nano .env
 sudo bash setup.sh
 ```
 
+## 🧪 Fresh Install / Test di VPS Baru
+
+Flow lengkap dari Ubuntu polos sampai server siap:
+
+```bash
+# ---- 1. Login VPS baru sebagai root ----
+ssh root@<IP-VPS-BARU>
+
+# ---- 2. Update & install git (minimal, untuk clone) ----
+apt update && apt install -y git
+
+# ---- 3. Clone repo (WAJIB public, atau pakai PAT) ----
+git clone https://github.com/xtmxady/vipies
+cd vipies
+
+# ---- 4. Isi credentials ----
+cp .env.example .env
+nano .env
+#   → MYSQL_ROOT_PASSWORD=IsiPasswordKuat123
+#   → TG_BOT_TOKEN=123456:ABC...       (dari @BotFather)
+#   → TG_CHAT_ID=123456789            (chat/group tujuan)
+#   → R2_ENABLED=1                     (kalau mau backup R2)
+#   → R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY
+#   → NODE_VERSION=22, PHP_VERSION=8.3 (opsional)
+
+# ---- 5. Jalankan setup ----
+sudo bash setup.sh
+# Pilih [1] Full install — semua modul otomatis berurutan
+```
+
+### Yang terjadi otomatis per modul:
+| Modul | Output di layar |
+|-------|-----------------|
+| 01-system | update + deps + UFW (22/80/443) |
+| 02-nginx | Nginx + template + helper `vipies-add-site` |
+| 03-node | Node 22 + PM2 + auto-start |
+| 04-php | PHP 8.3-FPM + OPcache + extensions |
+| 05-mysql | MySQL + set root pass + buat `/root/.my.cnf` |
+| 06-wpcli | WP-CLI + Certbot (snap) — *paling lama (download snap)* |
+| 07-backup | rclone + remote R2 (auto dari .env) + cron backup |
+| 08-monitoring | monitor script + cron 30 mnt + `/etc/vipies.conf` |
+| 09-autorestart | systemd Restart=always (nginx/mysql/php) |
+| 10-permission | daemon inotify auto chown/chmod uploads |
+
+### Verifikasi setelah selesai
+```bash
+systemctl status nginx mysql php8.3-fpm   # semua active
+pm2 status                                # PM2 jalan
+vipies-db create testdb testuser testpass # test helper MySQL
+vipies-add-site example.com wp            # test helper site
+vipies-monitor                            # test notif Telegram (cek HP)
+# Cek Telegram: harus ada notif "MONITOR VIPIES — semua normal"
+```
+
+> ⚠️ **Catatan**: Repo harus **public** untuk `git clone` HTTPS biasa di VPS baru.
+> Kalau tetap mau private, set PAT dulu:
+> ```bash
+> export GH_TOKEN=<PAT-ANDA>
+> git clone "https://x-access-token:${GH_TOKEN}@github.com/xtmxady/vipies"
+> ```
+
 ## 📦 Pilihan Install
 
 Menu interaktif `setup.sh`:
@@ -73,17 +134,22 @@ vipies-monitor
 | `MYSQL_ROOT_PASSWORD` | Password root MySQL |
 | `TG_BOT_TOKEN` | Bot token Telegram (dari @BotFather) |
 | `TG_CHAT_ID` | Chat/group ID tujuan notif |
+| `NODE_VERSION` | (optional) versi Node, default 22 |
+| `PHP_VERSION` | (optional) versi PHP, default 8.3 |
 | `R2_ENABLED` | `1` untuk aktifkan backup R2 |
 | `R2_REMOTE_NAME` | Nama remote rclone (default `r2`) |
-| `R2_BUCKET` | Nama bucket R2 |
-| `NODE_VERSION` | (optional) versi Node |
-| `PHP_VERSION` | (optional) versi PHP |
+| `R2_BUCKET` | Nama bucket R2 (default `hermes`) |
+| `R2_ACCOUNT_ID` | Account ID Cloudflare R2 (untuk auto-create remote) |
+| `R2_ACCESS_KEY_ID` | Access Key ID dari R2 API Token |
+| `R2_SECRET_ACCESS_KEY` | Secret Access Key dari R2 API Token |
 
 > ⚠️ **JANGAN commit .env** — sudah di-gitignore. Credentials tetap aman di server.
+> Credentials lain (untuk script yang jalan via cron) otomatis disalin ke `/etc/vipies.conf` (chmod 600) saat setup.
 
 ## 🔐 Keamanan
 
-- Tidak ada credentials hardcode di script — semua via `.env` (gitignored)
+- Tidak ada credentials hardcode di script — semua via `.env` (gitignored) → `/etc/vipies.conf` (chmod 600)
+- MySQL root disimpan di `/root/.my.cnf` (chmod 600)
 - Certbot via snap (fixed pyOpenSSL conflict)
 - UFW aktif otomatis (22/80/443)
 
@@ -100,7 +166,9 @@ vipies/
 ├── setup.sh              ← entry point (menu)
 ├── .env.example          ← contoh konfigurasi
 ├── modules/              ← modul-modul (01-system .. 10-permission, lib.sh)
-└── templates/            ← template (opsional, untuk VPS baru)
+├── templates/
+│   └── r2-backup.sh      ← template backup R2 (generic, untuk VPS baru)
+└── README.md             ← panduan ini
 ```
 
 ## 📝 Lisensi
