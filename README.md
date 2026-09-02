@@ -2,7 +2,7 @@
 
 > **vipies** = "VPS + IES" — one-shot provisioning script untuk setup server Ubuntu (Nginx, Node, PHP, MySQL, WP, backup, monitoring) otomatis & modular. Open-source, silakan kontribusi!
 
-Dirancang untuk **Ubuntu 24.04**. Modular — bisa install semua sekaligus atau per modul.
+Dirancang untuk **Ubuntu 24.04** (target utama). Juga bekerja di **22.04 / 20.04** — versi PHP, Node, dan socket PHP-FPM terdeteksi otomatis. Modular — bisa install semua sekaligus atau per modul.
 
 ## ✨ Fitur
 
@@ -77,20 +77,13 @@ sudo bash setup.sh
 
 ### Verifikasi setelah selesai
 ```bash
-systemctl status nginx mysql php8.3-fpm   # semua active
-pm2 status                                # PM2 jalan
+systemctl status nginx mysql php*-fpm   # semua active
+pm2 status                              # PM2 jalan
 vipies-db create testdb testuser testpass # test helper MySQL
 vipies-add-site example.com wp            # test helper site
 vipies-monitor                            # test notif Telegram (cek HP)
 # Cek Telegram: harus ada notif "MONITOR VIPIES — semua normal"
 ```
-
-> ⚠️ **Catatan**: Repo harus **public** untuk `git clone` HTTPS biasa di VPS baru.
-> Kalau tetap mau private, set PAT dulu:
-> ```bash
-> export GH_TOKEN=<PAT-ANDA>
-> git clone "https://x-access-token:${GH_TOKEN}@github.com/xtmxady/vipies"
-> ```
 
 ## 📦 Pilihan Install
 

@@ -43,7 +43,7 @@ server {
 
     location ~ \.php$ {
         include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        fastcgi_pass unix:/run/php/__PHP_SOCK__;
     }
 
     location ~* \.(css|js|jpg|jpeg|png|gif|ico|webp|svg|woff2?)$ {
@@ -91,6 +91,17 @@ server {
     }
 }
 TMPL
+
+# --- Substitusi socket PHP (mendukung multi-versi: 8.1, 8.3, dll) ---
+# Deteksi versi PHP-FPM yang terinstal/direpo; fallback php8.3-fpm
+PHP_SOCK=$(ls /run/php/php*-fpm.sock 2>/dev/null | head -1 | xargs -n1 basename 2>/dev/null || echo php8.3-fpm.sock)
+# Kalau belum ada socket (PHP belum install disini), cek paket tersedia di apt
+if [ "$PHP_SOCK" = "php8.3-fpm.sock" ] && ! ls /run/php/php*-fpm.sock >/dev/null 2>&1; then
+  DETECTED=$(apt-cache search '^php[0-9.]+-fpm$' 2>/dev/null | head -1 | grep -oE '[0-9.]+')
+  [ -n "$DETECTED" ] && PHP_SOCK="php${DETECTED}-fpm.sock"
+fi
+sed -i "s/__PHP_SOCK__/$PHP_SOCK/g" /etc/nginx/templates/wordpress.conf
+ok "Socket PHP-FPM template: $PHP_SOCK"
 
 # --- Helper: vipies-add-site ---
 cat > /usr/local/bin/vipies-add-site <<'HELPER'
