@@ -15,6 +15,7 @@ Dirancang untuk **Ubuntu 24.04** (target utama). Juga bekerja di **22.04 / 20.04
 - **Monitoring** — cron tiap 30 menit, notif Telegram bila ada layanan down / RAM / disk / load
 - **Auto-restart** — systemd Restart=always untuk nginx, mysql, php-fpm
 - **Auto-fix permission** — daemon inotify, real-time chown/chmod folder WordPress uploads
+- **Security hardening** — fail2ban (ban brute-force SSH & wp-login), lock eksekusi PHP di folder uploads (anti shell)
 
 ## 🚀 Quick Start
 
@@ -103,6 +104,7 @@ Menu interaktif `setup.sh`:
 | 10 | 09-autorestart | Auto-restart service |
 | 11 | 10-permission | Auto-fix permission |
 | 12 | 11-newsite | Helper new-site (bikin WP cepat) |
+| 13 | 12-hardening | Security hardening (fail2ban + lock uploads) |
 
 ## 🛠️ Helper CLI setelah install
 

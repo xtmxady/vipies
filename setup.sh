@@ -66,8 +66,9 @@ menu() {
   echo " 10) Auto-restart service"
   echo " 11) Auto-fix permission"
   echo " 12) Helper new-site (bikin WP cepat)"
+  echo " 13) Security hardening"
   echo "  0) Keluar"
-  echo -n "Pilih [0-12]: "; read -r choice
+  echo -n "Pilih [0-13]: "; read -r choice
   echo ""
 }
 
@@ -92,6 +93,7 @@ while true; do
       run_module 09-autorestart.sh "Auto-restart" || exit 1
       run_module 10-permission.sh "Auto-fix permission" || exit 1
       run_module 11-newsite.sh "Helper new-site" || exit 1
+      run_module 12-hardening.sh "Security hardening" || exit 1
       echo -e "\n${GREEN}✓✓ SEMUA MODUL SELESAI! Server siap.${NC}"
       ;;
     2) run_module 01-system.sh "Sistem dasar" ;;
@@ -105,6 +107,7 @@ while true; do
    10) run_module 09-autorestart.sh "Auto-restart" ;;
    11) run_module 10-permission.sh "Auto-fix permission" ;;
    12) run_module 11-newsite.sh "Helper new-site" ;;
+   13) run_module 12-hardening.sh "Security hardening" ;;
     0) echo -e "${GREEN}Selesai. Bye!${NC}"; exit 0 ;;
     *) echo -e "${RED}Pilihan tidak valid.${NC}" ;;
   esac
