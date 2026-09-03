@@ -1,177 +1,181 @@
 # vipies — Ubuntu Server Setup
 
-> **vipies** = "VPS + IES" — one-shot provisioning script untuk setup server Ubuntu (Nginx, Node, PHP, MySQL, WP, backup, monitoring) otomatis & modular. Open-source, silakan kontribusi!
+> **vipies** = "VPS + IES" — one-shot provisioning script for automated, modular Ubuntu server setup (Nginx, Node, PHP, MySQL, WordPress, backup, monitoring). Open-source — contributions welcome!
 
-Dirancang untuk **Ubuntu 24.04** (target utama). Juga bekerja di **22.04 / 20.04** — versi PHP, Node, dan socket PHP-FPM terdeteksi otomatis. Modular — bisa install semua sekaligus atau per modul.
+Built primarily for **Ubuntu 24.04**. Also works on **22.04 / 20.04** — PHP, Node, and PHP-FPM socket versions are auto-detected. Modular — install everything at once or one module at a time.
 
-## ✨ Fitur
+## ✨ Features
 
-- **Nginx** — reverse proxy + template siap pakai untuk **WordPress** & **Custom site** (Node/Express/PHP)
-- **Node.js + PM2** — versi bisa dipilih (default LTS 22), PM2 auto-start saat boot
-- **PHP-FPM + OPcache** — extensions lengkap, OPcache 128MB/10k files
-- **MySQL** — root password, buat DB + user, ubah password (via `vipies-db`)
-- **WP-CLI + Certbot** — wp-cli global, SSL via snap certbot (aman, tanpa konflik pyOpenSSL)
-- **Backup R2** — otomatis DB + file ke Cloudflare R2, retensi otomatis
-- **Monitoring** — cron tiap 30 menit, notif Telegram bila ada layanan down / RAM / disk / load
-- **Auto-restart** — systemd Restart=always untuk nginx, mysql, php-fpm
-- **Auto-fix permission** — daemon inotify, real-time chown/chmod folder WordPress uploads
-- **Security hardening** — fail2ban (ban brute-force SSH & wp-login), lock eksekusi PHP di folder uploads (anti shell)
+- **Nginx** — reverse proxy with ready-to-use templates for **WordPress** and **Custom sites** (Node/Express/PHP)
+- **Node.js + PM2** — choose your version (default LTS 22), PM2 auto-starts on boot
+- **PHP-FPM + OPcache** — all common extensions, OPcache 128MB / 10k files
+- **MySQL** — root password setup, create DB + users, change passwords (`vipies-db` helper)
+- **WP-CLI + Certbot** — global wp-cli, SSL via snap certbot (no pyOpenSSL conflicts)
+- **Backup to R2** — automated DB + file backups to Cloudflare R2, configurable retention
+- **Monitoring** — cron every 30 min, Telegram alerts when services go down / high RAM / disk / load
+- **Auto-restart** — systemd `Restart=always` for nginx, mysql, php-fpm
+- **Auto-fix permissions** — inotify daemon, real-time chown/chmod on WordPress uploads folders
+- **Security hardening** — fail2ban (brute-force SSH & wp-login), PHP execution locked in uploads (anti-shell)
 
 ## 🚀 Quick Start
 
 ```bash
-# 1. Clone & masuk
+# 1. Clone & enter
 git clone https://github.com/xtmxady/vipies
 cd vipies
 
-# 2. Siapkan konfigurasi (isi credentials)
+# 2. Configure credentials
 cp .env.example .env
 nano .env
 
-# 3. Jalankan (menu interaktif)
+# 3. Run (interactive menu)
 sudo bash setup.sh
 ```
 
-## 🧪 Fresh Install / Test di VPS Baru
+## 🧪 Fresh Install on a New VPS
 
-Flow lengkap dari Ubuntu polos sampai server siap:
+Complete flow from a bare Ubuntu install to a production-ready server:
 
 ```bash
-# ---- 1. Login VPS baru sebagai root ----
-ssh root@<IP-VPS-BARU>
+# ---- 1. SSH into the new VPS as root ----
+ssh root@<NEW-VPS-IP>
 
-# ---- 2. Update & install git (minimal, untuk clone) ----
+# ---- 2. Update & install git (minimum requirement) ----
 apt update && apt install -y git
 
-# ---- 3. Clone repo (WAJIB public, atau pakai PAT) ----
+# ---- 3. Clone the repo ----
 git clone https://github.com/xtmxady/vipies
 cd vipies
 
-# ---- 4. Isi credentials ----
+# ---- 4. Fill in your credentials ----
 cp .env.example .env
 nano .env
-#   → MYSQL_ROOT_PASSWORD=IsiPasswordKuat123
-#   → TG_BOT_TOKEN=123456:ABC...       (dari @BotFather)
-#   → TG_CHAT_ID=123456789            (chat/group tujuan)
-#   → R2_ENABLED=1                     (kalau mau backup R2)
+#   → MYSQL_ROOT_PASSWORD=YourStrongPassword123
+#   → TG_BOT_TOKEN=123456:ABC...        (from @BotFather)
+#   → TG_CHAT_ID=123456789              (target chat/group)
+#   → R2_ENABLED=1                       (enable R2 backup)
 #   → R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY
-#   → NODE_VERSION=22, PHP_VERSION=8.3 (opsional)
+#   → NODE_VERSION=22, PHP_VERSION=8.3  (optional)
 
-# ---- 5. Jalankan setup ----
+# ---- 5. Run setup ----
 sudo bash setup.sh
-# Pilih [1] Full install — semua modul otomatis berurutan
+# Select [1] Full install — all modules run automatically in order
 ```
 
-### Yang terjadi otomatis per modul:
-| Modul | Output di layar |
-|-------|-----------------|
-| 01-system | update + deps + UFW (22/80/443) |
-| 02-nginx | Nginx + template + helper `vipies-add-site` |
-| 03-node | Node 22 + PM2 + auto-start |
-| 04-php | PHP 8.3-FPM + OPcache + extensions |
-| 05-mysql | MySQL + set root pass + buat `/root/.my.cnf` |
-| 06-wpcli | WP-CLI + Certbot (snap) — *paling lama (download snap)* |
-| 07-backup | rclone + remote R2 (auto dari .env) + cron backup |
-| 08-monitoring | monitor script + cron 30 mnt + `/etc/vipies.conf` |
+### What happens per module:
+
+| Module | What it does |
+|--------|-------------|
+| 01-system | System update + core packages + UFW (22/80/443) |
+| 02-nginx | Nginx install + WP/Custom templates + `vipies-add-site` helper |
+| 03-node | Node.js (selectable version) + PM2 + auto-start |
+| 04-php | PHP-FPM + OPcache + extensions |
+| 05-mysql | MySQL install + root password + `/root/.my.cnf` |
+| 06-wpcli | WP-CLI + Certbot (snap) — *slowest module (snap download)* |
+| 07-backup | rclone + R2 remote (auto-configured from .env) + backup cron |
+| 08-monitoring | Monitor script + cron every 30 min + `/etc/vipies.conf` |
 | 09-autorestart | systemd Restart=always (nginx/mysql/php) |
-| 10-permission | daemon inotify auto chown/chmod uploads |
+| 10-permission | inotify daemon auto chown/chmod on uploads |
 
-### Verifikasi setelah selesai
+### Verify after setup
+
 ```bash
-systemctl status nginx mysql php*-fpm   # semua active
-pm2 status                              # PM2 jalan
-vipies-db create testdb testuser testpass # test helper MySQL
-vipies-add-site example.com wp            # test helper site
-vipies-monitor                            # test notif Telegram (cek HP)
-# Cek Telegram: harus ada notif "MONITOR VIPIES — semua normal"
+systemctl status nginx mysql php*-fpm    # all active
+pm2 status                                # PM2 running
+vipies-db create testdb testuser testpass # test MySQL helper
+vipies-add-site example.com wp            # test site helper
+vipies-monitor                            # test Telegram notification
+# Check Telegram: you should see "MONITOR VIPIES — all healthy"
 ```
 
-## 📦 Pilihan Install
+## 📦 Install Options
 
-Menu interaktif `setup.sh`:
+Interactive `setup.sh` menu:
 
-| Pilihan | Modul | Fungsi |
-|---------|-------|--------|
-| 1 | Semua | Full install semua modul |
-| 2 | 01-system | Update + dependensi + firewall |
-| 3 | 02-nginx | Nginx + template WP/Custom |
+| Option | Module | Description |
+|--------|--------|-------------|
+| 1 | All | Full install — every module |
+| 2 | 01-system | System update + dependencies + firewall |
+| 3 | 02-nginx | Nginx + WP/Custom templates |
 | 4 | 03-node | Node.js + PM2 |
 | 5 | 04-php | PHP-FPM + OPcache |
-| 6 | 05-mysql | MySQL + DB + ganti pass |
+| 6 | 05-mysql | MySQL + DB management |
 | 7 | 06-wpcli | WP-CLI + Certbot |
-| 8 | 07-backup | Backup R2 + cron |
-| 9 | 08-monitoring | Monitoring + Telegram |
-| 10 | 09-autorestart | Auto-restart service |
-| 11 | 10-permission | Auto-fix permission |
-| 12 | 11-newsite | Helper new-site (bikin WP cepat) |
-| 13 | 12-hardening | Security hardening (fail2ban + lock uploads) |
+| 8 | 07-backup | R2 Backup + cron |
+| 9 | 08-monitoring | Monitoring + Telegram alerts |
+| 10 | 09-autorestart | Auto-restart services |
+| 11 | 10-permission | Auto-fix permissions |
+| 12 | 11-newsite | WordPress site creator helper |
+| 13 | 12-hardening | Security hardening (fail2ban + upload lock) |
 
-## 🛠️ Helper CLI setelah install
+## 🛠️ CLI Helpers (available after install)
 
 ```bash
-# Tambah website baru (WordPress atau custom)
-vipies-add-site example.com wp          # WordPress
-vipies-add-site api.example.com custom 4000   # Custom/Node port 4000
+# Add a new website (WordPress or custom)
+vipies-add-site example.com wp              # WordPress
+vipies-add-site api.example.com custom 4000 # Custom/Node on port 4000
 
-# Kelola database MySQL
-vipies-db create mydb myuser mypass     # buat DB + user
-vipies-db drop mydb                      # hapus DB
-vipies-db pass myuser newpass            # ganti pass user
-vipies-db rootpass newrootpass           # ganti pass root
+# Manage MySQL databases
+vipies-db create mydb myuser mypass         # create DB + user
+vipies-db drop mydb                          # drop database
+vipies-db pass myuser newpass                # change user password
+vipies-db rootpass newrootpass               # change root password
 
-# Monitoring manual
+# Manual monitoring check
 vipies-monitor
 
-# Buat situs WordPress baru lengkap (Nginx + DB + WP install + permission)
+# Create a full WordPress site in one command (Nginx + DB + WP + permissions)
 vipies-new-site example.com
-# Optional: tentukan DB/user/pass sendiri
+# Optional: specify your own DB/user/pass
 vipies-new-site example.com wpmydb myuser mypass
 ```
 
-## 📄 Konfigurasi (.env)
+## 📄 Configuration (.env)
 
-| Variabel | Deskripsi |
-|----------|-----------|
-| `MYSQL_ROOT_PASSWORD` | Password root MySQL |
-| `TG_BOT_TOKEN` | Bot token Telegram (dari @BotFather) |
-| `TG_CHAT_ID` | Chat/group ID tujuan notif |
-| `NODE_VERSION` | (optional) versi Node, default 22 |
-| `PHP_VERSION` | (optional) versi PHP, default 8.3 |
-| `R2_ENABLED` | `1` untuk aktifkan backup R2 |
-| `R2_REMOTE_NAME` | Nama remote rclone (default `r2`) |
-| `R2_BUCKET` | Nama bucket R2 (default `hermes`) |
-| `R2_ACCOUNT_ID` | Account ID Cloudflare R2 (untuk auto-create remote) |
-| `R2_ACCESS_KEY_ID` | Access Key ID dari R2 API Token |
-| `R2_SECRET_ACCESS_KEY` | Secret Access Key dari R2 API Token |
+| Variable | Description |
+|----------|-------------|
+| `MYSQL_ROOT_PASSWORD` | MySQL root password |
+| `TG_BOT_TOKEN` | Telegram bot token (from @BotFather) |
+| `TG_CHAT_ID` | Target chat/group ID for notifications |
+| `NODE_VERSION` | (optional) Node.js version, default 22 |
+| `PHP_VERSION` | (optional) PHP version, default 8.3 |
+| `R2_ENABLED` | Set to `1` to enable R2 backup |
+| `R2_REMOTE_NAME` | Rclone remote name (default `r2`) |
+| `R2_BUCKET` | R2 bucket name (default `hermes`) |
+| `R2_ACCOUNT_ID` | Cloudflare R2 Account ID (auto-creates rclone remote) |
+| `R2_ACCESS_KEY_ID` | R2 API Token Access Key ID |
+| `R2_SECRET_ACCESS_KEY` | R2 API Token Secret Access Key |
 
-> ⚠️ **JANGAN commit .env** — sudah di-gitignore. Credentials tetap aman di server.
-> Credentials lain (untuk script yang jalan via cron) otomatis disalin ke `/etc/vipies.conf` (chmod 600) saat setup.
+> ⚠️ **Do NOT commit `.env`** — it's already in `.gitignore`. Credentials stay safe on your server.
+> Other credentials (for cron-based scripts) are automatically copied to `/etc/vipies.conf` (chmod 600) during setup.
 
-## 🔐 Keamanan
+## 🔐 Security
 
-- Tidak ada credentials hardcode di script — semua via `.env` (gitignored) → `/etc/vipies.conf` (chmod 600)
-- MySQL root disimpan di `/root/.my.cnf` (chmod 600)
-- Certbot via snap (fixed pyOpenSSL conflict)
-- UFW aktif otomatis (22/80/443)
+- No hardcoded credentials — everything goes through `.env` (gitignored) → `/etc/vipies.conf` (chmod 600)
+- MySQL root stored in `/root/.my.cnf` (chmod 600)
+- Certbot via snap (avoids pyOpenSSL conflict)
+- UFW enabled automatically (22/80/443)
+- fail2ban protects SSH & wp-login from brute-force
+- PHP execution locked in WordPress uploads directories
 
-## 🤝 Kontribusi
+## 🤝 Contributing
 
-Repo ini open-source & dibuat untuk komunitas. Silakan:
-- Report bug via [Issues](https://github.com/xtmxady/vipies/issues)
-- Kirim perbaikan via Pull Request
-- Tambah modul sesuai kebutuhan
+This repo is open-source and built for the community. Feel free to:
+- Report bugs via [Issues](https://github.com/xtmxady/vipies/issues)
+- Submit fixes via Pull Request
+- Add modules as needed
 
-### Struktur repo
+### Repo Structure
 ```
 vipies/
-├── setup.sh              ← entry point (menu)
-├── .env.example          ← contoh konfigurasi
-├── modules/              ← modul-modul (01-system .. 10-permission, lib.sh)
+├── setup.sh              ← entry point (interactive menu)
+├── .env.example          ← example configuration
+├── modules/              ← modules (01-system .. 12-hardening, lib.sh)
 ├── templates/
-│   └── r2-backup.sh      ← template backup R2 (generic, untuk VPS baru)
-└── README.md             ← panduan ini
+│   └── r2-backup.sh      ← generic R2 backup template (for new VPS)
+└── README.md
 ```
 
-## 📝 Lisensi
+## 📝 License
 
-MIT — bebas pakai & modifikasi.
+MIT — free to use and modify.
