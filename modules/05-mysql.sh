@@ -47,20 +47,20 @@ cat > /usr/local/bin/vipies-db <<'HELPER'
 #   vipies-db drop <db>                   # hapus db
 #   vipies-db pass <user> <newpass>       # ganti pass user
 #   vipies-db rootpass <newpass>          # ganti pass root
-set -euo pipefail
-MYSQL="mysql -u root"
-case "$1" in
+set -uo pipefail
+MYSQL=(mysql -u root)
+case "${1:-}" in
   create)
-    MYSQL -e "CREATE DATABASE IF NOT EXISTS \`$2\`; CREATE USER IF NOT EXISTS '$3'@'localhost' IDENTIFIED BY '$4'; GRANT ALL PRIVILEGES ON \`$2\`.* TO '$3'@'localhost'; FLUSH PRIVILEGES;"
+    "${MYSQL[@]}" -e "CREATE DATABASE IF NOT EXISTS \`$2\`; CREATE USER IF NOT EXISTS '$3'@'localhost' IDENTIFIED BY '$4'; GRANT ALL PRIVILEGES ON \`$2\`.* TO '$3'@'localhost'; FLUSH PRIVILEGES;"
     echo "✓ DB $2 + user $3 dibuat";;
   drop)
-    MYSQL -e "DROP DATABASE IF EXISTS \`$2\`;"
+    "${MYSQL[@]}" -e "DROP DATABASE IF EXISTS \`$2\`;"
     echo "✓ DB $2 dihapus";;
   pass)
-    MYSQL -e "ALTER USER '$2'@'localhost' IDENTIFIED WITH caching_sha2_password BY '$3'; FLUSH PRIVILEGES;"
+    "${MYSQL[@]}" -e "ALTER USER '$2'@'localhost' IDENTIFIED WITH caching_sha2_password BY '$3'; FLUSH PRIVILEGES;"
     echo "✓ Password user $2 diubah";;
   rootpass)
-    MYSQL -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY '$2'; FLUSH PRIVILEGES;"
+    "${MYSQL[@]}" -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY '$2'; FLUSH PRIVILEGES;"
     echo "✓ Password root diubah";;
   *) echo "Usage: vipies-db {create|drop|pass|rootpass} ..."; exit 1;;
 esac
