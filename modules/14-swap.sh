@@ -46,7 +46,9 @@ if [ -f "$SWAPFILE" ]; then
   swapoff "$SWAPFILE" 2>/dev/null || true
 else
   step "Membuat swapfile ${SWAP_SIZE}..."
-  fallocate -l "$SWAP_SIZE" "$SWAPFILE" 2>/dev/null || dd if=/dev/zero of="$SWAPFILE" bs=1M count=$(( ${SWAP_SIZE%G} * 1024 )) status=none
+  # fallocate bikin file sparse di beberapa fs → swapon Invalid argument.
+  # Pakai dd selalu (lebih lambat tapi pasti jalan).
+  dd if=/dev/zero of="$SWAPFILE" bs=1M count=$(( ${SWAP_SIZE%G} * 1024 )) status=none
   chmod 600 "$SWAPFILE"
   ok "Swapfile dibuat"
 fi
