@@ -79,6 +79,10 @@ sudo bash setup.sh
 | 08-monitoring | Monitor script + cron every 30 min + `/etc/vipies.conf` |
 | 09-autorestart | systemd Restart=always (nginx/mysql/php) |
 | 10-permission | inotify daemon auto chown/chmod on uploads |
+| 11-newsite | Once-run WordPress site creator |
+| 12-hardening | fail2ban + PHP exec lock in uploads |
+| 13-migrate | Hermes + 9router install + restore server config from R2 |
+| 14-swap | Ensure 2GB swap + swappiness=10 |
 
 ### Verify after setup
 
@@ -111,6 +115,7 @@ Interactive `setup.sh` menu:
 | 12 | 11-newsite | WordPress site creator helper |
 | 13 | 12-hardening | Security hardening (fail2ban + upload lock) |
 | 14 | 13-migrate | Hermes + 9router install + restore server config from R2 |
+| 15 | 14-swap | Ensure 2GB swap (default) + swappiness=10 |
 
 ## 🔁 VPS Migration
 

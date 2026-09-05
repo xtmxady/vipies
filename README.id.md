@@ -82,6 +82,7 @@ sudo bash setup.sh
 | 11-newsite | Helper pembuat situs WordPress sekali jalan |
 | 12-hardening | fail2ban + kunci eksekusi PHP di uploads (anti-shell) |
 | 13-migrate | Install Hermes + 9router + restore config server dari R2 |
+| 14-swap | Pastikan swap 2GB (default) + tuning swappiness |
 
 ### Verifikasi setelah setup
 
@@ -114,6 +115,7 @@ Menu interaktif `setup.sh`:
 | 12 | 11-newsite | Helper pembuat situs WordPress |
 | 13 | 12-hardening | Security hardening (fail2ban + lock uploads) |
 | 14 | 13-migrate | Migrasi VPS (Hermes + 9router + restore config) |
+| 15 | 14-swap | Swap 2GB default |
 
 ## 🔁 Migrasi VPS
 

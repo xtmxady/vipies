@@ -68,8 +68,9 @@ menu() {
   echo " 12) Helper new-site (bikin WP cepat)"
   echo " 13) Security hardening"
   echo " 14) Migrasi VPS (Hermes + 9router + restore config)"
+  echo " 15) Swap 2GB default"
   echo "  0) Keluar"
-  echo -n "Pilih [0-14]: "; read -r choice
+  echo -n "Pilih [0-15]: "; read -r choice
   echo ""
 }
 
@@ -110,6 +111,7 @@ while true; do
    12) run_module 11-newsite.sh "Helper new-site" ;;
    13) run_module 12-hardening.sh "Security hardening" ;;
     14) run_module 13-migrate.sh "Migrasi VPS (Hermes + 9router + restore)" ;;
+    15) run_module 14-swap.sh "Swap 2GB default" ;;
     0) echo -e "${GREEN}Selesai. Bye!${NC}"; exit 0 ;;
     *) echo -e "${RED}Pilihan tidak valid.${NC}" ;;
   esac
