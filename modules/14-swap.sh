@@ -12,7 +12,7 @@ SWAP_SIZE=${SWAP_SIZE:-2G}
 SWAPFILE=/swap.img
 
 # Prompt interaktif: ukuran swap (default 2G, isi angka = GB)
-if [ -z "$SWAP_SIZE_ENV" ]; then
+if [ -z "${SWAP_SIZE_ENV:-}" ]; then
   read -rp "  Ukuran swap default [2] (GB, contoh: 2, 4, 8): " ans
   ans=${ans:-2}
   case "$ans" in
