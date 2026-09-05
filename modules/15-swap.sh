@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-#  vipies — 14-swap.sh
+#  vipies — 15-swap.sh
 #  Pastikan swap 2GB tersedia (default) — buat kalau belum ada.
 #  Idempotent: kalau swap sudah >= 2GB, lewati.
 # ============================================================
@@ -65,4 +65,4 @@ sysctl -w vm.swappiness=10 >/dev/null 2>&1 || true
 grep -q "vm.swappiness" /etc/sysctl.conf || echo "vm.swappiness=10" >> /etc/sysctl.conf
 
 ok "Swap ${SWAP_SIZE} aktif. swappiness=10."
-ok "Module 14 (swap) selesai."
+ok "Module 15 (swap) selesai."

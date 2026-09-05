@@ -114,8 +114,9 @@ Interactive `setup.sh` menu:
 | 11 | 10-permission | Auto-fix permissions |
 | 12 | 11-newsite | WordPress site creator helper |
 | 13 | 12-hardening | Security hardening (fail2ban + upload lock) |
-| 14 | 13-migrate | Hermes + 9router install + restore server config from R2 |
-| 15 | 14-swap | Ensure 2GB swap (default) + swappiness=10 |
+| 14 | 13-migrate | Install Core (9router FIRST, then Hermes) |
+| 15 | 14-config-backup | Backup/Restore server config (separate, after core) |
+| 16 | 15-swap | Ensure 2GB swap (default) + swappiness=10 |
 
 ## 🔁 VPS Migration
 
@@ -126,7 +127,8 @@ Move your entire server (sites, config, Hermes, 9router, backups) to a new VPS i
 # → config zip uploaded to rclone:R2 → bucket hermes/server-config/
 
 # On the NEW VPS — after modules 1-12 complete:
-sudo bash setup.sh        # choose [14] VPS Migration
+sudo bash setup.sh        # pick [14] Install Core (9router + Hermes)
+sudo bash setup.sh        # then pick [15] Backup/Restore config → restore
 # or manually:
 bash /root/migrate-restore.sh   # download latest config zip from R2, extract to real paths automatically
 ```

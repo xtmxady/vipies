@@ -114,8 +114,9 @@ Menu interaktif `setup.sh`:
 | 11 | 10-permission | Auto-fix permission |
 | 12 | 11-newsite | Helper pembuat situs WordPress |
 | 13 | 12-hardening | Security hardening (fail2ban + lock uploads) |
-| 14 | 13-migrate | Migrasi VPS (Hermes + 9router + restore config) |
-| 15 | 14-swap | Swap 2GB default |
+| 14 | 13-migrate | Install Core (9router + Hermes + system deps) — urutan: 9router DULU, lalu Hermes |
+| 15 | 14-config-backup | Backup/Restore config server (terpisah, setelah core terinstall) |
+| 16 | 15-swap | Swap 2GB default |
 
 ## 🔁 Migrasi VPS
 
@@ -126,12 +127,18 @@ Pindah seluruh server (situs, config, Hermes, 9router, backup) ke VPS baru denga
 # → zip config terupload ke rclone:R2 → bucket hermes/server-config/
 
 # Di VPS BARU — setelah modul 1-12 selesai:
-sudo bash setup.sh        # pilih [14] Migrasi VPS
+sudo bash setup.sh        # pilih [14] Install Core (9router + Hermes)
+sudo bash setup.sh        # lalu pilih [15] Backup/Restore config → restore
 # atau manual:
 bash /root/migrate-restore.sh   # download zip config terbaru dari R2, extract ke path asli otomatis
 ```
 
-Yang di-restore otomatis: **Hermes** (`~/.hermes/` — config, memories, skills, riwayat chat, state.db), **9router** (`~/.9router/`), **Nginx**, **LetsEncrypt SSL**, **PM2 dump**, **crontab**, **fail2ban**, **.env situs**, **rclone.conf**, **MySQL root** (`~/.my.cnf`).
+**Kenapa restore config terpisah?** Backup config hanya berisi data (config, state, sessions — `~/.hermes`, `~/.9router`), bukan binary program. Binary Hermes (`/usr/local/lib/hermes-agent/`) dan 9router (`/usr/lib/node_modules/9router`) harus terinstall DULU sebelum config di-restore — restore config ke binary yang belum ada = gagal/rusak. Urutan benar:
+
+1. **Modul 14 (Install Core)**: apt → Node 20 → **9router** → UFW 20128 → **Hermes** → doctor/setup
+2. **Modul 15 (Backup/Restore config)**: restore zip config dari R2 — barulah config Hermes/9router/Nginx/SSL dipulihkan
+
+Yang di-restore otomatis: **Hermes** (`~/.hermes/` — config, memories, skills, riwayat chat, state.db, credentials), **9router** (`~/.9router/`), **Nginx**, **LetsEncrypt SSL**, **PM2 dump**, **crontab**, **fail2ban**, **.env situs**, **rclone.conf**, **MySQL root** (`~/.my.cnf`).
 
 > ⚠️ Hermes diinstall via installer resmi (`curl ... install.sh | bash`) — **bukan** npm package. 9router & PM2 via `npm i -g`.
 

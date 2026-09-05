@@ -1,75 +1,73 @@
 #!/usr/bin/env bash
 # ============================================================
-# vipies — Modul 13: Migrasi VPS (install Hermes + 9router + restore config)
-# Dipakai di VPS BARU setelah modul 1-12. Menyiapkan Hermes,
-# 9router, PM2, rclone, lalu restore config server dari R2.
+# vipies — Modul 13: Install Core (9router + Hermes + system deps)
+# Dipakai di VPS BARU. Urutan sesuai permintaan Mas Ady:
+#   1) apt update/upgrade + curl/ufw
+#   2) Node.js via NodeSource (>= 20)
+#   3) 9router (npm global) — DULUAN dari Hermes
+#   4) UFW buka 20128 (port 9router dashboard)
+#   5) Hermes (installer resmi curl) — SETELAH 9router
+#   6) hermes doctor + hermes setup
+# Restore config = modul TERPISAH (14-config-backup.sh),
+# jalan SETELAH paket inti terinstall.
 # ============================================================
 set -u
+cd "$(dirname "$0")/.."
+source modules/lib.sh
+
 NC='\033[0m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'
 log() { echo -e "${GREEN}✓${NC} $*"; }
 warn() { echo -e "${YELLOW}⚠${NC} $*"; }
 err() { echo -e "${RED}✗${NC} $*"; }
 
-# ---------- 1. Install rclone (kalau belum) ----------
-if ! command -v rclone >/dev/null 2>&1; then
-  log "Install rclone..."
-  curl -fsSL https://rclone.org/install.sh | bash >/dev/null 2>&1 || { err "Gagal install rclone."; exit 1; }
-else
-  log "rclone sudah ada ($(rclone --version | head -1))"
-fi
+# ---------- 1. apt update + upgrade + dasar ----------
+step "apt update & upgrade..."
+export DEBIAN_FRONTEND=noninteractive
+apt-get update >/dev/null 2>&1
+apt-get upgrade -y >/dev/null 2>&1
+apt-get install -y curl ufw unzip zip >/dev/null 2>&1
+log "apt siap"
 
-# ---------- 2. Install Hermes (installer resmi) ----------
+# ---------- 2. Node.js >= 20 via NodeSource ----------
+if ! command -v node >/dev/null 2>&1; then
+  step "Install Node.js 20 via NodeSource..."
+  curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1
+  apt-get install -y nodejs >/dev/null 2>&1
+else
+  log "Node.js sudah ada ($(node -v))"
+fi
+node -v | grep -qE "v(2[0-9]|1[0-9])" || warn "Node < 20 — upgrade manual disarankan (node -v: $(node -v))"
+
+# ---------- 3. 9router (npm global) — DULUAN ----------
+if ! command -v 9router >/dev/null 2>&1; then
+  step "Install 9router (npm global)..."
+  npm install -g 9router >/dev/null 2>&1 || { err "Gagal install 9router."; exit 1; }
+else
+  log "9router sudah ada ($(9router --version 2>&1 | head -1))"
+fi
+9router --version 2>&1 | head -1 | xargs -I{} log "9router {}"
+
+# ---------- 4. UFW buka port 20128 ----------
+step "UFW buka 20128..."
+ufw allow 20128/tcp >/dev/null 2>&1
+ufw enable >/dev/null 2>&1
+ufw status | grep -E "20128|Status" | head -3
+log "UFW aktif, port 20128 dibuka"
+
+# ---------- 5. Hermes (installer resmi) — SETELAH 9router ----------
 if ! command -v hermes >/dev/null 2>&1; then
-  log "Install Hermes Agent..."
+  step "Install Hermes Agent (installer resmi)..."
   curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash >/dev/null 2>&1 || { err "Gagal install Hermes."; exit 1; }
 else
   log "Hermes sudah ada ($(hermes --version 2>&1 | head -1))"
 fi
 
-# ---------- 3. Install 9router + PM2 (npm global) ----------
-if ! command -v 9router >/dev/null 2>&1; then
-  log "Install 9router..."
-  npm i -g 9router >/dev/null 2>&1 || { err "Gagal install 9router."; exit 1; }
-else
-  log "9router sudah ada"
-fi
-if ! command -v pm2 >/dev/null 2>&1; then
-  log "Install PM2..."
-  npm i -g pm2 >/dev/null 2>&1 || { err "Gagal install PM2."; exit 1; }
-else
-  log "PM2 sudah ada"
-fi
+# ---------- 6. hermes doctor + setup ----------
+step "hermes doctor..."
+source ~/.bashrc 2>/dev/null || true
+hermes doctor 2>&1 | tail -8 || warn "hermes doctor error — lanjut setup"
+step "hermes setup..."
+hermes setup >/dev/null 2>&1 || warn "hermes setup belum selesai — jalankan manual: hermes setup"
 
-# ---------- 4. Restore config dari R2 ----------
-echo ""
-echo "=============================================="
-echo "  Restore config server dari R2"
-echo "  (butuh remote rclone 'r2' — bucket 'hermes')"
-echo "=============================================="
-if rclone lsf r2:hermes/server-config >/dev/null 2>&1; then
-  read -rp "Tanggal backup config [YYYY-MM-DD, kosong = terbaru]: " R_DATE
-  # Pakai script dari repo (scripts/migrate-restore.sh) — salin ke /root dulu
-  if [ -f /root/migrate-restore.sh ]; then
-    bash /root/migrate-restore.sh "${R_DATE:-}"
-  elif [ -f "$(dirname "$0")/../scripts/migrate-restore.sh" ]; then
-    bash "$(dirname "$0")/../scripts/migrate-restore.sh" "${R_DATE:-}"
-  else
-    warn "migrate-restore.sh tidak ditemukan — download dari GitHub dulu?"
-    warn "  wget -O /root/migrate-restore.sh https://raw.githubusercontent.com/xtmxady/vipies/main/scripts/migrate-restore.sh"
-  fi
-else
-  warn "Remote r2 belum bisa diakses — lewati restore."
-  warn "Konfigurasi dulu: rclone config (remote 'r2' → bucket 'hermes')"
-fi
-
-# ---------- 5. Aktifkan service ----------
-log "Restart service..."
-systemctl restart nginx fail2ban 2>/dev/null || true
-command -v pm2 >/dev/null 2>&1 && pm2 resurrect 2>/dev/null || true
-
-echo ""
-log "Modul 13 selesai. Hermes, 9router, PM2, rclone siap."
-log "Config dipulihkan (kalau remote r2 tersedia)."
-echo "  - Jalankan gateway Hermes:  hermes gateway run"
-echo "  - Cek PM2:                  pm2 status"
-echo "  - Cek Nginx:                nginx -t; systemctl status nginx"
+log "Modul 13 selesai. 9router + Hermes terinstall."
+log "SELANJUTNYA jalankan modul 14 (Backup/Restore config) untuk pulihkan config server."
