@@ -11,6 +11,16 @@ source modules/lib.sh
 SWAP_SIZE=${SWAP_SIZE:-2G}
 SWAPFILE=/swap.img
 
+# Prompt interaktif: ukuran swap (default 2G, isi angka = GB)
+if [ -z "$SWAP_SIZE_ENV" ]; then
+  read -rp "  Ukuran swap default [2] (GB, contoh: 2, 4, 8): " ans
+  ans=${ans:-2}
+  case "$ans" in
+    ''|*[!0-9]*) ans=2 ;;
+  esac
+  SWAP_SIZE="${ans}G"
+fi
+
 current_swap() {
   swapon --show=size --noheadings -b 2>/dev/null | awk '{s+=$1} END{print s+0}'
 }
