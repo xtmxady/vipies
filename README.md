@@ -2,6 +2,8 @@
 
 > **vipies** = "VPS + IES" — one-shot provisioning script for automated, modular Ubuntu server setup (Nginx, Node, PHP, MySQL, WordPress, backup, monitoring). Open-source — contributions welcome!
 
+> **Languages:** [English](README.md) | [Bahasa Indonesia](README.id.md)
+
 Built primarily for **Ubuntu 24.04**. Also works on **22.04 / 20.04** — PHP, Node, and PHP-FPM socket versions are auto-detected. Modular — install everything at once or one module at a time.
 
 ## ✨ Features
@@ -16,6 +18,7 @@ Built primarily for **Ubuntu 24.04**. Also works on **22.04 / 20.04** — PHP, N
 - **Auto-restart** — systemd `Restart=always` for nginx, mysql, php-fpm
 - **Auto-fix permissions** — inotify daemon, real-time chown/chmod on WordPress uploads folders
 - **Security hardening** — fail2ban (brute-force SSH & wp-login), PHP execution locked in uploads (anti-shell)
+- **VPS migration** — module 13: install Hermes Agent + 9router + rclone + restore entire server config from R2 (see [VPS Migration](#-vps-migration))
 
 ## 🚀 Quick Start
 
@@ -107,6 +110,25 @@ Interactive `setup.sh` menu:
 | 11 | 10-permission | Auto-fix permissions |
 | 12 | 11-newsite | WordPress site creator helper |
 | 13 | 12-hardening | Security hardening (fail2ban + upload lock) |
+| 14 | 13-migrate | Hermes + 9router install + restore server config from R2 |
+
+## 🔁 VPS Migration
+
+Move your entire server (sites, config, Hermes, 9router, backups) to a new VPS in one go:
+
+```bash
+# On the OLD VPS (running vipies) — config is auto-backed up daily (cron 03:00)
+# → config zip uploaded to rclone:R2 → bucket hermes/server-config/
+
+# On the NEW VPS — after modules 1-12 complete:
+sudo bash setup.sh        # choose [14] VPS Migration
+# or manually:
+bash /root/migrate-restore.sh   # download latest config zip from R2, extract to real paths automatically
+```
+
+Restored automatically: **Hermes** (`~/.hermes/` — config, memories, skills, chat history, state.db), **9router** (`~/.9router/`), **Nginx**, **LetsEncrypt SSL**, **PM2 dump**, **crontab**, **fail2ban**, **site .env files**, **rclone.conf**, **MySQL root** (`~/.my.cnf`).
+
+> ⚠️ Hermes is installed via the official installer (`curl ... install.sh | bash`) — **not** an npm package. 9router & PM2 via `npm i -g`.
 
 ## 🛠️ CLI Helpers (available after install)
 
@@ -170,10 +192,11 @@ This repo is open-source and built for the community. Feel free to:
 vipies/
 ├── setup.sh              ← entry point (interactive menu)
 ├── .env.example          ← example configuration
-├── modules/              ← modules (01-system .. 12-hardening, lib.sh)
+├── modules/              ← modules (01-system .. 13-migrate, lib.sh)
 ├── templates/
 │   └── r2-backup.sh      ← generic R2 backup template (for new VPS)
-└── README.md
+├── README.md             ← English
+└── README.id.md          ← Bahasa Indonesia
 ```
 
 ## 📝 License
