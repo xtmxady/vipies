@@ -48,13 +48,14 @@ echo "  (butuh remote rclone 'r2' — bucket 'hermes')"
 echo "=============================================="
 if rclone lsf r2:hermes/server-config >/dev/null 2>&1; then
   read -rp "Tanggal backup config [YYYY-MM-DD, kosong = terbaru]: " R_DATE
-  if command -v migrate-restore >/dev/null 2>&1; then
-    migrate-restore "${R_DATE:-}"
-  elif [ -f /root/migrate-restore.sh ]; then
+  # Pakai script dari repo (scripts/migrate-restore.sh) — salin ke /root dulu
+  if [ -f /root/migrate-restore.sh ]; then
     bash /root/migrate-restore.sh "${R_DATE:-}"
+  elif [ -f "$(dirname "$0")/../scripts/migrate-restore.sh" ]; then
+    bash "$(dirname "$0")/../scripts/migrate-restore.sh" "${R_DATE:-}"
   else
-    warn "migrate-restore.sh belum ada di /root — download dari R2 dulu?"
-    warn "  rclone copyto r2:hermes/server-config/<zip> /root/migrate-restore.sh"
+    warn "migrate-restore.sh tidak ditemukan — download dari GitHub dulu?"
+    warn "  wget -O /root/migrate-restore.sh https://raw.githubusercontent.com/xtmxady/vipies/main/scripts/migrate-restore.sh"
   fi
 else
   warn "Remote r2 belum bisa diakses — lewati restore."
