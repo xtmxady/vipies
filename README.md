@@ -119,6 +119,7 @@ Interactive `setup.sh` menu:
 | 16 | 15-swap | Ensure 2GB swap (default) + swappiness=10 |
 | 17 | 16-adminer | Adminer — web DB manager at http://IP/adminer (MySQL login) |
 | 18 | 17-cert | SSL via vipies-cert — enable HTTPS after DNS points |
+| 19 | 18-delete-site | **DESTRUCTIVE** — vipies-delete-site removes a site completely: files, MySQL DB+user, nginx config, SSL cert, r2-sites.conf entry |
 
 ## 🔁 VPS Migration
 

@@ -72,8 +72,9 @@ menu() {
   echo " 16) Swap 2GB default"
   echo " 17) Adminer (DB manager web, akses IP/adminer)"
   echo " 18) SSL cert (vipies-cert — pasang HTTPS setelah DNS pointing)"
+  echo " 19) Delete site (vipies-delete-site — HAPUS situs lengkap, destructive!)"
   echo "  0) Keluar"
-  echo -n "Pilih [0-18]: "; read -r choice
+  echo -n "Pilih [0-19]: "; read -r choice
   echo ""
 }
 
@@ -118,6 +119,7 @@ while true; do
       16) run_module 15-swap.sh "Swap 2GB default" ;;
    17) run_module 16-adminer.sh "Adminer (DB manager web)" ;;
    18) run_module 17-cert.sh "SSL cert (vipies-cert)" ;;
+   19) run_module 18-delete-site.sh "Delete site (destructive)" ;;
     0) echo -e "${GREEN}Selesai. Bye!${NC}"; exit 0 ;;
     *) echo -e "${RED}Pilihan tidak valid.${NC}" ;;
   esac

@@ -119,6 +119,7 @@ Menu interaktif `setup.sh`:
 | 16 | 15-swap | Swap 2GB default |
 | 17 | 16-adminer | Adminer — DB manager web, akses http://IP/adminer (login user/pass MySQL) |
 | 18 | 17-cert | SSL via vipies-cert — pasang HTTPS setelah DNS pointing |
+| 19 | 18-delete-site | **DESTRUKTIF** — vipies-delete-site hapus situs lengkap: file, DB+user MySQL, config nginx, SSL cert, entry r2-sites.conf |
 
 ## 🔁 Migrasi VPS
 
