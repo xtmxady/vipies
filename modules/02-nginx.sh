@@ -108,17 +108,61 @@ cat > /usr/local/bin/vipies-add-site <<'HELPER'
 #!/bin/bash
 # vipies — tambah website baru
 # Usage: vipies-add-site <domain> <wp|custom> [port]
+#   otomatis: buat config nginx + certbot SSL + reload (kalau DNS sudah pointing)
 set -euo pipefail
 DOMAIN="$1"; TYPE="${2:-custom}"; PORT="${3:-4000}"
 TMPL="/etc/nginx/templates/${TYPE}.conf"
+# alias: wp -> wordpress.conf
+if [ ! -f "$TMPL" ] && [ "$TYPE" = "wp" ]; then
+  TMPL="/etc/nginx/templates/wordpress.conf"
+fi
 [ -f "$TMPL" ] || { echo "Template '$TYPE' tidak ada (wp|custom)"; exit 1; }
 [ -d "/var/www/$DOMAIN" ] || mkdir -p "/var/www/$DOMAIN"
+
+# Generate config nginx dari template.
+# Kalau cert SSL belum ada, buat versi HTTP-only (hapus blok 443) biar nginx tetap valid.
+HAS_CERT=0
+[ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ] && HAS_CERT=1
 sed -e "s/__DOMAIN__/$DOMAIN/g" -e "s/__PORT__/$PORT/g" "$TMPL" > "/etc/nginx/sites-available/$DOMAIN"
+if [ "$HAS_CERT" = "0" ] && grep -q "listen 443" "/etc/nginx/sites-available/$DOMAIN"; then
+  python3 - "$DOMAIN" <<'PYEOF'
+import re, sys
+p = f"/etc/nginx/sites-available/{sys.argv[1]}"
+s = open(p).read()
+# Hapus blok server 443 SSL (cert belum ada) — nginx tetap valid HTTP-only
+s = re.sub(r'server \{\s*\n\s*listen 443 ssl.*?\n\}', '# (blok 443 nonaktif — belum ada cert)', s, flags=re.S)
+open(p, 'w').write(s)
+PYEOF
+  echo "  → Config HTTP-only (belum ada cert SSL)"
+fi
 ln -sfn "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
-nginx -t && systemctl reload nginx
-echo "✓ Site $DOMAIN dibuat ($TYPE). Jalankan: certbot --nginx -d $DOMAIN -d www.$DOMAIN"
+
+# Certbot SSL (otomatis) — butuh DNS sudah pointing ke server ini.
+if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+  echo "  ✓ Cert SSL sudah ada"
+else
+  echo "  → Request cert SSL via certbot (butuh DNS $DOMAIN → IP server ini)..."
+  if certbot --nginx -d "$DOMAIN" -d "www.$DOMAIN" --non-interactive --agree-tos -m admin@"$DOMAIN" --redirect >/dev/null 2>&1; then
+    echo "  ✓ Cert SSL terpasang"
+  else
+    echo "  ⚠ certbot belum bisa (DNS belum pointing / port 80 belum terbuka?)"
+    echo "    Jalankan manual nanti: certbot --nginx -d $DOMAIN -d www.$DOMAIN"
+  fi
+fi
+
+# Reload hanya kalau config valid (cert ada = test lolos)
+if nginx -t >/dev/null 2>&1; then
+  systemctl reload nginx
+  echo "✓ Site $DOMAIN dibuat ($TYPE) + nginx reload"
+else
+  echo "⚠ Site $DOMAIN dibuat, TAPI nginx belum reload (butuh cert SSL dulu)"
+  echo "  Jalankan: certbot --nginx -d $DOMAIN -d www.$DOMAIN"
+fi
 HELPER
 chmod +x /usr/local/bin/vipies-add-site
+
+# alias template: wp -> wordpress.conf (kinerja helper: vipies-add-site <d> wp)
+ln -sf wordpress.conf /etc/nginx/templates/wp.conf
 
 step "Membuat placeholder.png (fallback gambar rusak)..."
 mkdir -p /var/www/global-assets
