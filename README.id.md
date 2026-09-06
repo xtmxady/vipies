@@ -117,7 +117,8 @@ Menu interaktif `setup.sh`:
 | 14 | 13-migrate | Install Core (9router + Hermes + system deps) — urutan: 9router DULU, lalu Hermes |
 | 15 | 14-config-backup | Backup/Restore config server (terpisah, setelah core terinstall) |
 | 16 | 15-swap | Swap 2GB default |
-| 17 | 16-adminer | Adminer — DB manager web, akses http://IP/adminer (basic auth) |
+| 17 | 16-adminer | Adminer — DB manager web, akses http://IP/adminer (login user/pass MySQL) |
+| 18 | 17-cert | SSL via vipies-cert — pasang HTTPS setelah DNS pointing |
 
 ## 🔁 Migrasi VPS
 
@@ -150,10 +151,13 @@ Yang di-restore otomatis: **Hermes** (`~/.hermes/` — config, memories, skills,
 # 1) WordPress LENGKAP (Nginx + DB + WP core + wp-config + permission): disarankan
 vipies-new-site example.com
 # 2) Hanya config Nginx (custom/Node, atau WP manual):
-vipies-add-site example.com wp               # config Nginx WP (auto certbot kalau DNS pointing)
+vipies-add-site example.com wp               # config Nginx WP
 vipies-add-site api.example.com custom 4000  # config Nginx custom/Node di port 4000
-#    Catatan: 'wp' otomatis → template wordpress.conf; kalau cert belum ada,
-#    config jadi HTTP-only biar nginx tetap valid
+#    Catatan: 'wp' otomatis → template wordpress.conf; config dibuat HTTP-only
+#    (blok 443 dihapus) kalau cert belum ada biar nginx tetap valid
+
+# 3) Pasang SSL — WAJIB setelah DNS pointing (A record → IP server):
+vipies-cert example.com                      # cek DNS dulu, lalu certbot Let's Encrypt
 
 # Kelola database MySQL
 vipies-db create mydb myuser mypass         # buat DB + user

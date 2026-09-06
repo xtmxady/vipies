@@ -117,7 +117,8 @@ Interactive `setup.sh` menu:
 | 14 | 13-migrate | Install Core (9router FIRST, then Hermes) |
 | 15 | 14-config-backup | Backup/Restore server config (separate, after core) |
 | 16 | 15-swap | Ensure 2GB swap (default) + swappiness=10 |
-| 17 | 16-adminer | Adminer — web DB manager at http://IP/adminer (basic auth) |
+| 17 | 16-adminer | Adminer — web DB manager at http://IP/adminer (MySQL login) |
+| 18 | 17-cert | SSL via vipies-cert — enable HTTPS after DNS points |
 
 ## 🔁 VPS Migration
 
@@ -145,10 +146,13 @@ Restored automatically: **Hermes** (`~/.hermes/` — config, memories, skills, c
 # 1) FULL WordPress (Nginx + DB + WP core + wp-config + permissions): recommended
 vipies-new-site example.com
 # 2) Nginx config only (custom/Node, or manual WP):
-vipies-add-site example.com wp               # WP nginx config (auto certbot when DNS points)
+vipies-add-site example.com wp               # WP nginx config
 vipies-add-site api.example.com custom 4000  # custom/Node nginx config on port 4000
-#    Note: 'wp' auto-maps to wordpress.conf; when no cert yet,
-#    config is HTTP-only so nginx stays valid
+#    Note: 'wp' auto-maps to wordpress.conf; config is HTTP-only
+#    (443 block removed) when no cert yet, so nginx stays valid
+
+# 3) Enable SSL — run AFTER DNS points (A record → server IP):
+vipies-cert example.com                      # checks DNS first, then certbot
 
 # Manage MySQL databases
 vipies-db create mydb myuser mypass         # create DB + user

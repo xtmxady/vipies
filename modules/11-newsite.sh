@@ -61,9 +61,10 @@ echo "  Root:      $WEBROOT"
 echo "  DB:        $DBNAME (user $DBUSER)"
 echo "  DB pass:   $DBPASS       <-- simpan! di /root/r2-sites.conf"
 echo ""
-echo "  Langkah terakhir (manual):"
-echo "    certbot --nginx -d $DOMAIN -d www.$DOMAIN"
-echo "    # install WP: buka https://$DOMAIN di browser"
+echo "  Langkah terakhir:"
+echo "    1) Point DNS $DOMAIN + www ke IP server ini"
+echo "    2) Pasang SSL: vipies-cert $DOMAIN"
+echo "    3) Install WP: buka https://$DOMAIN di browser"
 echo "=============================================="
 HELPER
 chmod +x /usr/local/bin/vipies-new-site

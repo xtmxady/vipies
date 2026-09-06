@@ -71,8 +71,9 @@ menu() {
   echo " 15) Backup/Restore config server (terpisah)"
   echo " 16) Swap 2GB default"
   echo " 17) Adminer (DB manager web, akses IP/adminer)"
+  echo " 18) SSL cert (vipies-cert — pasang HTTPS setelah DNS pointing)"
   echo "  0) Keluar"
-  echo -n "Pilih [0-17]: "; read -r choice
+  echo -n "Pilih [0-18]: "; read -r choice
   echo ""
 }
 
@@ -116,6 +117,7 @@ while true; do
       15) run_module 14-config-backup.sh "Backup/Restore config server" ;;
       16) run_module 15-swap.sh "Swap 2GB default" ;;
    17) run_module 16-adminer.sh "Adminer (DB manager web)" ;;
+   18) run_module 17-cert.sh "SSL cert (vipies-cert)" ;;
     0) echo -e "${GREEN}Selesai. Bye!${NC}"; exit 0 ;;
     *) echo -e "${RED}Pilihan tidak valid.${NC}" ;;
   esac

@@ -106,9 +106,9 @@ ok "Socket PHP-FPM template: $PHP_SOCK"
 # --- Helper: vipies-add-site ---
 cat > /usr/local/bin/vipies-add-site <<'HELPER'
 #!/bin/bash
-# vipies — tambah website baru
+# vipies — tambah website baru (config nginx saja)
 # Usage: vipies-add-site <domain> <wp|custom> [port]
-#   otomatis: buat config nginx + certbot SSL + reload (kalau DNS sudah pointing)
+#   SSL: jalankan terpisah setelah DNS pointing → vipies-cert <domain>
 set -euo pipefail
 DOMAIN="$1"; TYPE="${2:-custom}"; PORT="${3:-4000}"
 TMPL="/etc/nginx/templates/${TYPE}.conf"
@@ -137,26 +137,13 @@ PYEOF
 fi
 ln -sfn "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
 
-# Certbot SSL (otomatis) — butuh DNS sudah pointing ke server ini.
-if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
-  echo "  ✓ Cert SSL sudah ada"
-else
-  echo "  → Request cert SSL via certbot (butuh DNS $DOMAIN → IP server ini)..."
-  if certbot --nginx -d "$DOMAIN" -d "www.$DOMAIN" --non-interactive --agree-tos -m admin@"$DOMAIN" --redirect >/dev/null 2>&1; then
-    echo "  ✓ Cert SSL terpasang"
-  else
-    echo "  ⚠ certbot belum bisa (DNS belum pointing / port 80 belum terbuka?)"
-    echo "    Jalankan manual nanti: certbot --nginx -d $DOMAIN -d www.$DOMAIN"
-  fi
-fi
-
-# Reload hanya kalau config valid (cert ada = test lolos)
+# Reload nginx (config HTTP-only selalu valid tanpa cert)
 if nginx -t >/dev/null 2>&1; then
   systemctl reload nginx
-  echo "✓ Site $DOMAIN dibuat ($TYPE) + nginx reload"
+  echo "✓ Site $DOMAIN dibuat ($TYPE, HTTP) + nginx reload"
+  echo "  Setelah DNS pointing, pasang SSL: vipies-cert $DOMAIN"
 else
-  echo "⚠ Site $DOMAIN dibuat, TAPI nginx belum reload (butuh cert SSL dulu)"
-  echo "  Jalankan: certbot --nginx -d $DOMAIN -d www.$DOMAIN"
+  echo "⚠ Site $DOMAIN dibuat, TAPI nginx belum reload — cek: nginx -t"
 fi
 HELPER
 chmod +x /usr/local/bin/vipies-add-site
