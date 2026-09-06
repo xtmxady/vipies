@@ -153,6 +153,7 @@ vipies-new-site example.com
 # 2) Hanya config Nginx (custom/Node, atau WP manual):
 vipies-add-site example.com wp               # config Nginx WP
 vipies-add-site api.example.com custom 4000  # config Nginx custom/Node di port 4000
+vipies-add-site example.com static           # config Nginx STATIS (HTML/CSS/JS saja, tanpa port)
 #    Catatan: 'wp' otomatis → template wordpress.conf; config dibuat HTTP-only
 #    (blok 443 dihapus) kalau cert belum ada biar nginx tetap valid
 

@@ -92,6 +92,39 @@ server {
 }
 TMPL
 
+cat > /etc/nginx/templates/static.conf <<'TMPL'
+# vipies template — Static site (HTML/CSS/JS saja, tanpa backend)
+# Nama file: /etc/nginx/sites-available/<domain>
+server {
+    listen 80;
+    server_name __DOMAIN__ www.__DOMAIN__;
+    return 301 https://www.__DOMAIN__$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name www.__DOMAIN__;
+
+    ssl_certificate     /etc/letsencrypt/live/__DOMAIN__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__DOMAIN__/privkey.pem;
+
+    root /var/www/__DOMAIN__;
+    index index.html;
+
+    client_max_body_size 128M;
+
+    # Static murni — tanpa proxy backend
+    location / {
+        try_files $uri $uri.html $uri/ =404;
+    }
+
+    location ~* \.(css|js|jpg|jpeg|png|gif|ico|webp|svg|woff2?)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+}
+TMPL
+
 # --- Substitusi socket PHP (mendukung multi-versi: 8.1, 8.3, dll) ---
 # Deteksi versi PHP-FPM yang terinstal/direpo; fallback php8.3-fpm
 PHP_SOCK=$(ls /run/php/php*-fpm.sock 2>/dev/null | head -1 | xargs -n1 basename 2>/dev/null || echo php8.3-fpm.sock)
@@ -107,7 +140,10 @@ ok "Socket PHP-FPM template: $PHP_SOCK"
 cat > /usr/local/bin/vipies-add-site <<'HELPER'
 #!/bin/bash
 # vipies — tambah website baru (config nginx saja)
-# Usage: vipies-add-site <domain> <wp|custom> [port]
+# Usage: vipies-add-site <domain> <wp|custom|static> [port]
+#   wp     = WordPress (PHP-FPM)
+#   custom = backend app (proxy ke 127.0.0.1:PORT)
+#   static = HTML/CSS/JS statis (tanpa backend, tanpa port)
 #   SSL: jalankan terpisah setelah DNS pointing → vipies-cert <domain>
 set -euo pipefail
 DOMAIN="$1"; TYPE="${2:-custom}"; PORT="${3:-4000}"

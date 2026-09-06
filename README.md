@@ -148,6 +148,7 @@ vipies-new-site example.com
 # 2) Nginx config only (custom/Node, or manual WP):
 vipies-add-site example.com wp               # WP nginx config
 vipies-add-site api.example.com custom 4000  # custom/Node nginx config on port 4000
+vipies-add-site example.com static           # STATIC site config (HTML/CSS/JS only, no port)
 #    Note: 'wp' auto-maps to wordpress.conf; config is HTTP-only
 #    (443 block removed) when no cert yet, so nginx stays valid
 
