@@ -64,8 +64,20 @@ if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
 fi
 
 # Jalankan certbot (--nginx pakai blok 80; --redirect aktifkan HTTPS+redirect)
+# Sertakan www HANYA kalau record DNS www ada (hindari NXDOMAIN → seluruh cert gagal)
+WWW_IP=""
+WWW_IP=$(getent ahostsv4 "www.$DOMAIN" 2>/dev/null | awk '{print $1}' | head -1) || true
+[ -z "$WWW_IP" ] && WWW_IP=$(dig +short @1.1.1.1 "www.$DOMAIN" A 2>/dev/null | head -1) || true
+[ -z "$WWW_IP" ] && WWW_IP=$(dig +short @8.8.8.8 "www.$DOMAIN" A 2>/dev/null | head -1) || true
+if [ -n "$WWW_IP" ] && [ "$WWW_IP" = "$MYIP" ]; then
+  echo "  → www.$DOMAIN pointing OK — sertakan www"
+  CERT_DOMAINS=(-d "$DOMAIN" -d "www.$DOMAIN")
+else
+  echo "  → www.$DOMAIN tidak ada/belum pointing — cert untuk $DOMAIN saja"
+  CERT_DOMAINS=(-d "$DOMAIN")
+fi
 echo "  → Request cert via certbot..."
-if certbot --nginx -d "$DOMAIN" -d "www.$DOMAIN" --non-interactive --agree-tos --redirect --email "admin@$DOMAIN"; then
+if certbot --nginx "${CERT_DOMAINS[@]}" --non-interactive --agree-tos --redirect --email "admin@$DOMAIN"; then
   # Certbot --nginx otomatis ubah config: tambah blok 443 + redirect.
   systemctl reload nginx
   echo ""
