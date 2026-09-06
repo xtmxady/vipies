@@ -145,9 +145,14 @@ Yang di-restore otomatis: **Hermes** (`~/.hermes/` — config, memories, skills,
 ## 🛠️ CLI Helpers (tersedia setelah install)
 
 ```bash
-# Tambah situs baru (WordPress atau custom)
-vipies-add-site example.com wp              # WordPress
-vipies-add-site api.example.com custom 4000 # Custom/Node di port 4000
+# Tambah situs baru — pilih sesuai kebutuhan:
+# 1) WordPress LENGKAP (Nginx + DB + WP core + wp-config + permission): disarankan
+vipies-new-site example.com
+# 2) Hanya config Nginx (custom/Node, atau WP manual):
+vipies-add-site example.com wp               # config Nginx WP (auto certbot kalau DNS pointing)
+vipies-add-site api.example.com custom 4000  # config Nginx custom/Node di port 4000
+#    Catatan: 'wp' otomatis → template wordpress.conf; kalau cert belum ada,
+#    config jadi HTTP-only biar nginx tetap valid
 
 # Kelola database MySQL
 vipies-db create mydb myuser mypass         # buat DB + user

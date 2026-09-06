@@ -140,9 +140,14 @@ Restored automatically: **Hermes** (`~/.hermes/` — config, memories, skills, c
 ## 🛠️ CLI Helpers (available after install)
 
 ```bash
-# Add a new website (WordPress or custom)
-vipies-add-site example.com wp              # WordPress
-vipies-add-site api.example.com custom 4000 # Custom/Node on port 4000
+# Add a new website — pick what you need:
+# 1) FULL WordPress (Nginx + DB + WP core + wp-config + permissions): recommended
+vipies-new-site example.com
+# 2) Nginx config only (custom/Node, or manual WP):
+vipies-add-site example.com wp               # WP nginx config (auto certbot when DNS points)
+vipies-add-site api.example.com custom 4000  # custom/Node nginx config on port 4000
+#    Note: 'wp' auto-maps to wordpress.conf; when no cert yet,
+#    config is HTTP-only so nginx stays valid
 
 # Manage MySQL databases
 vipies-db create mydb myuser mypass         # create DB + user
