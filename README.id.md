@@ -117,6 +117,7 @@ Menu interaktif `setup.sh`:
 | 14 | 13-migrate | Install Core (9router + Hermes + system deps) — urutan: 9router DULU, lalu Hermes |
 | 15 | 14-config-backup | Backup/Restore config server (terpisah, setelah core terinstall) |
 | 16 | 15-swap | Swap 2GB default |
+| 17 | 16-adminer | Adminer — DB manager web, akses http://IP/adminer (basic auth) |
 
 ## 🔁 Migrasi VPS
 

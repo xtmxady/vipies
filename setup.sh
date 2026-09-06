@@ -70,8 +70,9 @@ menu() {
   echo " 14) Install Core (9router + Hermes + system deps)"
   echo " 15) Backup/Restore config server (terpisah)"
   echo " 16) Swap 2GB default"
+  echo " 17) Adminer (DB manager web, akses IP/adminer)"
   echo "  0) Keluar"
-  echo -n "Pilih [0-16]: "; read -r choice
+  echo -n "Pilih [0-17]: "; read -r choice
   echo ""
 }
 
@@ -114,6 +115,7 @@ while true; do
       14) run_module 13-migrate.sh "Install Core (9router + Hermes)" ;;
       15) run_module 14-config-backup.sh "Backup/Restore config server" ;;
       16) run_module 15-swap.sh "Swap 2GB default" ;;
+   17) run_module 16-adminer.sh "Adminer (DB manager web)" ;;
     0) echo -e "${GREEN}Selesai. Bye!${NC}"; exit 0 ;;
     *) echo -e "${RED}Pilihan tidak valid.${NC}" ;;
   esac

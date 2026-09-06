@@ -117,6 +117,7 @@ Interactive `setup.sh` menu:
 | 14 | 13-migrate | Install Core (9router FIRST, then Hermes) |
 | 15 | 14-config-backup | Backup/Restore server config (separate, after core) |
 | 16 | 15-swap | Ensure 2GB swap (default) + swappiness=10 |
+| 17 | 16-adminer | Adminer — web DB manager at http://IP/adminer (basic auth) |
 
 ## 🔁 VPS Migration
 
