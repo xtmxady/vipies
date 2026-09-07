@@ -2,9 +2,10 @@
 # ============================================================
 #  Backup otomatis ke R2 (Cloudflare) - AUTO-SCAN + REPORT DETAIL
 #  Auto-detect semua situs di /var/www/
-#  - DB      : harian, retensi 5 hari
-#  - WordPress: code zip tiap 2 hari (retensi 4), uploads mingguan (retensi 2)
-#  - Custom   : zip full tiap 2 hari (retensi 4)
+#  - DB        : harian, retensi 5 hari
+#  - WordPress : zip PENUH wp-content (uploads+plugins+themes+mu-plugins,
+#                minus cache/updraft/wflogs/sampah) tiap 2 hari, retensi 4
+#  - Custom    : zip full tiap 2 hari (retensi 4)
 #  DB creds dibaca dari /var/www/<site>/server/.env bila ada, fallback ke r2-sites.conf
 #  Notif Telegram detail via curl (0 token Hermes)
 # ============================================================
@@ -17,7 +18,6 @@ R2_REMOTE="${R2_REMOTE_NAME:-r2}:${R2_BUCKET:-hermes}"
 R2="$R2_REMOTE"
 DB_RETENTION_DAYS=5
 CODE_RETENTION_DAYS=8
-UPLOAD_RETENTION_COUNT=2
 LOG="/var/log/r2-backup.log"
 REPORT="${TMPDIR_REPORT:-/root/backup-report.txt}"
 SITES_CONF="/root/r2-sites.conf"
@@ -85,30 +85,24 @@ backup_db() {
   rclone delete "${R2}/${SITE}/db" --min-age "$((DB_RETENTION_DAYS+1))d" >> "$LOG" 2>&1 || true
 }
 
-# WordPress CODE (tiap 2 hari)
-backup_code() {
+# WordPress WP-CONTENT penuh (uploads+plugins+themes+mu-plugins, minus sampah) — tiap 2 hari
+backup_wpcontent() {
   local SITE="$1" WEBROOT="$2"
-  ( cd "$WEBROOT/wp-content" && zip -rq "$TMPDIR/${SITE}-code-${DATE}.zip" plugins themes mu-plugins -x "*/cache/*" 2>/dev/null || true )
-  rclone copyto "$TMPDIR/${SITE}-code-${DATE}.zip" "${R2}/${SITE}/files/${SITE}-code-${DATE}.zip" >> "$LOG" 2>&1
-  local n=$(count_files "files" "${SITE}-code-*.zip")
-  echo "$(date '+%F %T') |    ✅ Code \`${SITE}-code-${DATE}.zip\` (ke-$n/4)" >> "$REPORT"
-  rm -f "$TMPDIR/${SITE}-code-${DATE}.zip"
-  rclone delete "${R2}/${SITE}/files" --include "${SITE}-code-*.zip" --min-age "${CODE_RETENTION_DAYS}d" >> "$LOG" 2>&1 || true
-}
-
-# WordPress UPLOADS (mingguan)
-backup_uploads() {
-  local SITE="$1" WEBROOT="$2"
-  local ZIP="$TMPDIR/${SITE}-uploads-${DATE}.zip"
-  ( cd "$WEBROOT/wp-content" && zip -rq "$ZIP" uploads -x "*/cache/*" 2>/dev/null || true )
-  rclone copyto "$ZIP" "${R2}/${SITE}/files/${SITE}-uploads-${DATE}.zip" >> "$LOG" 2>&1
-  local n=$(count_files "files" "${SITE}-uploads-*.zip")
-  echo "$(date '+%F %T') |    ✅ Uploads \`${SITE}-uploads-${DATE}.zip\` (ke-$n/2)" >> "$REPORT"
-  rm -f "$ZIP"
-  rclone lsf "${R2}/${SITE}/files" --include "${SITE}-uploads-*.zip" --files-only 2>/dev/null | \
-    sort -r | tail -n +$((UPLOAD_RETENTION_COUNT+1)) | while read -r old; do
-      rclone deletefile "${R2}/${SITE}/files/$old" >> "$LOG" 2>&1
-    done
+  local ZIP="$TMPDIR/${SITE}-wpcontent-${DATE}.zip"
+  ( cd "$WEBROOT/wp-content" && zip -rq "$ZIP" . \
+      -x "cache/*" "w3tc-config/*" "upgrade/*" "upgrade-temp-backup/*" \
+         "maintenance/*" "wflogs/*" "jetpack-waf/*" "imunify-security/*" \
+         "updraft/*" "speedycache-config/*" "advanced-cache.php" "maintenance.php" "mysqlmon.sh" 2>/dev/null || true )
+  if [ -s "$ZIP" ]; then
+    rclone copyto "$ZIP" "${R2}/${SITE}/files/${SITE}-wpcontent-${DATE}.zip" >> "$LOG" 2>&1
+    local n=$(count_files "files" "${SITE}-wpcontent-*.zip")
+    echo "$(date '+%F %T') |    ✅ WPContent \`${SITE}-wpcontent-${DATE}.zip\` (ke-$n/4)" >> "$REPORT"
+    rm -f "$ZIP"
+    rclone delete "${R2}/${SITE}/files" --include "${SITE}-wpcontent-*.zip" --min-age "${CODE_RETENTION_DAYS}d" >> "$LOG" 2>&1 || true
+  else
+    echo "$(date '+%F %T') |    ⚠️ wp-content zip kosong/gagal" >> "$REPORT"
+    rm -f "$ZIP"
+  fi
 }
 
 # CUSTOM full zip (tiap 2 hari)
@@ -145,14 +139,9 @@ for webdir in /var/www/*/; do
     echo "   _(WordPress)_" >> "$REPORT"
     backup_db "$site" "$dbinfo"
     if (( DAY_OF_MONTH % 2 == 0 )); then
-      backup_code "$site" "$webdir"
+      backup_wpcontent "$site" "$webdir"
     else
-      echo "$(date '+%F %T') |    code: skip (hari ganjil)" >> "$REPORT"
-    fi
-    if (( DAY_OF_MONTH % 7 == 0 )); then
-      backup_uploads "$site" "$webdir"
-    else
-      echo "$(date '+%F %T') |    uploads: skip (bukan hari mingguan)" >> "$REPORT"
+      echo "$(date '+%F %T') |    wp-content: skip (hari ganjil)" >> "$REPORT"
     fi
   else
     echo "   _(Custom site)_" >> "$REPORT"
