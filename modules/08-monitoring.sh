@@ -85,7 +85,7 @@ const os = require('os');
 const fs = require('fs');
 const { execSync } = require('child_process');
 
-// Token dibaca dari /etc/vipies.conf (dibuat modul 08 dari .env saat install)
+// Token & config dibaca dari /etc/vipies.conf (dibuat modul 08 dari .env saat install)
 function readConf(key) {
   try {
     const txt = fs.readFileSync('/etc/vipies.conf', 'utf8');
@@ -94,13 +94,48 @@ function readConf(key) {
   } catch (e) { return ''; }
 }
 
-const SITE_URL = readConf('SITE_URL') || 'https://www.seribukafetrk.com';
 const BOT_TOKEN = readConf('TG_BOT_TOKEN');
 const CHAT_ID = readConf('TG_CHAT_ID');
 
 if (!BOT_TOKEN || !CHAT_ID) {
   console.error('TG_BOT_TOKEN / TG_CHAT_ID kosong di /etc/vipies.conf');
   process.exit(1);
+}
+
+// Daftar situs: dari SITES di conf (comma-sep), fallback auto-detect nginx sites-enabled
+function getSites() {
+  const fromConf = readConf('SITES');
+  if (fromConf) return fromConf.split(',').map(s => s.trim()).filter(Boolean);
+  try {
+    const out = execSync("grep -rh 'server_name' /etc/nginx/sites-enabled/ | grep -v 'server_name _;' | tr -s ' ' | sed 's/^ *server_name //' | tr ' ' '\\n' | sort -u").toString();
+    var sites = out.split('\n').map(s => s.trim().replace(/;$/, '')).filter(s => s && s !== '_');
+    // Normalize: buang www (cek bare domain), dedupe
+    var seen = {};
+    return sites.map(function(s) { return s.replace(/^www\./, ''); })
+      .filter(function(s) { if (seen[s]) return false; seen[s] = true; return true; });
+  } catch (e) { return ['seribukafetrk.com']; }
+}
+
+function checkSite(url) {
+  return new Promise(function(resolve) {
+    var done = false;
+    var req = https.get('https://' + url, { agent: false }, function(res) {
+      done = true;
+      var ok = res.statusCode === 200 || res.statusCode === 301 || res.statusCode === 302;
+      resolve({ url: url, status: ok ? '✅ Online' : '⚠️ Status ' + res.statusCode });
+      res.resume();
+    });
+    req.on('error', function() {
+      if (!done) { done = true; resolve({ url: url, status: '🔴 DOWN' }); }
+    });
+    req.setTimeout(8000, function() {
+      if (!done) {
+        done = true;
+        req.destroy();
+        resolve({ url: url, status: '⏱️ Timeout' });
+      }
+    });
+  });
 }
 
 function sendTelegram(msg) {
@@ -138,41 +173,29 @@ function getStats() {
   return { memPct: memPct, disk: diskStr, pm2Lines: pm2Lines, loadAvg: loadAvg, uptime: uptime };
 }
 
-function checkSite(stats) {
-  var done = false;
-  var req = https.get(SITE_URL, { agent: false }, function(res) {
-    done = true;
-    var s = res.statusCode === 200 ? '✅ Online' : '⚠️ Status ' + res.statusCode;
-    var msg = '📊 <b>Monitor ' + SITE_URL.replace(/^https?:\/\/(www\.)?/, '') + '</b>\n\n' +
-      '🌐 Site: ' + s + '\n\n' +
-      '⚙️ <b>Proses PM2:</b>\n' + stats.pm2Lines + '\n\n' +
-      '🧠 RAM Server: ' + stats.memPct + '%\n' +
-      '💾 Disk: ' + stats.disk + '\n' +
-      '📈 Load Avg: ' + stats.loadAvg + '\n' +
-      '⏱ Uptime: ' + stats.uptime;
-    sendTelegram(msg);
-  });
-  req.on('error', function(e) {
-    if (!done) {
-      done = true;
-      sendTelegram('🔴 <b>SITE DOWN!</b>\n' + e.message + '\n\n⚙️ Proses PM2:\n' + stats.pm2Lines);
-    }
-  });
-  req.setTimeout(10000, function() {
-    if (!done) {
-      done = true;
-      req.destroy();
-      sendTelegram('⏱️ <b>SITE TIMEOUT!</b>\nTidak merespons 10 detik.\n\n⚙️ Proses PM2:\n' + stats.pm2Lines);
-    }
-  });
+async function main() {
+  const stats = getStats();
+  const sites = getSites();
+  const results = await Promise.all(sites.map(checkSite));
+
+  const lines = results.map(function(r) {
+    return '🌐 Site ' + r.url + ' : ' + r.status;
+  }).join('\n');
+
+  const msg = '📊 <b>Monitor VPS</b>\n\n' +
+    lines + '\n\n' +
+    '⚙️ <b>Proses PM2:</b>\n' + stats.pm2Lines + '\n\n' +
+    '🧠 RAM Server: ' + stats.memPct + '%\n' +
+    '💾 Disk: ' + stats.disk + '\n' +
+    '📈 Load Avg: ' + stats.loadAvg + '\n' +
+    '⏱ Uptime: ' + stats.uptime;
+
+  sendTelegram(msg);
 }
 
-try {
-  var stats = getStats();
-  checkSite(stats);
-} catch(e) {
+main().catch(function(e) {
   sendTelegram('❌ Monitor error: ' + e.message);
-}
+});
 MONJS
 chmod 755 /var/www/monitor.js
 ok "Monitor Node standalone dibuat (/var/www/monitor.js)"
