@@ -107,8 +107,8 @@ function getSites() {
   const fromConf = readConf('SITES');
   if (fromConf) return fromConf.split(',').map(s => s.trim()).filter(Boolean);
   try {
-    const out = execSync("grep -rh 'server_name' /etc/nginx/sites-enabled/ | grep -v 'server_name _;' | tr -s ' ' | sed 's/^ *server_name //' | tr ' ' '\\n' | sort -u").toString();
-    var sites = out.split('\n').map(s => s.trim().replace(/;$/, '')).filter(s => s && s !== '_');
+    const out = execSync("grep -h 'server_name' /etc/nginx/sites-enabled/* | grep -v 'server_name _;' | tr -s ' ' | sed 's/^ *server_name //' | tr ' ' '\\n' | sort -u").toString();
+    var sites = out.split('\n').map(s => s.trim().replace(/;$/, '')).filter(s => s && s !== '_' && s !== 'example.com' && s.indexOf('#') !== 0);
     // Normalize: buang www (cek bare domain), dedupe
     var seen = {};
     return sites.map(function(s) { return s.replace(/^www\./, ''); })
