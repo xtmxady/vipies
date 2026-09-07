@@ -19,6 +19,7 @@ TG_BOT_TOKEN=${TG_BOT_TOKEN:-}
 TG_CHAT_ID=${TG_CHAT_ID:-}
 R2_REMOTE_NAME=${R2_REMOTE_NAME:-r2}
 R2_BUCKET=${R2_BUCKET:-hermes}
+SITE_URL=${SITE_URL:-https://www.seribukafetrk.com}
 CONF
 chmod 600 /etc/vipies.conf
 ok "/etc/vipies.conf ditulis (chmod 600)"
@@ -77,12 +78,117 @@ curl -s -o /dev/null "https://api.telegram.org/bot${TG_BOT}/sendMessage" \
 MON
 chmod +x /usr/local/bin/vipies-monitor
 
+step "Membuat monitor Node standalone (/var/www/monitor.js)..."
+cat > /var/www/monitor.js <<'MONJS'
+const https = require('https');
+const os = require('os');
+const fs = require('fs');
+const { execSync } = require('child_process');
+
+// Token dibaca dari /etc/vipies.conf (dibuat modul 08 dari .env saat install)
+function readConf(key) {
+  try {
+    const txt = fs.readFileSync('/etc/vipies.conf', 'utf8');
+    const m = txt.match(new RegExp('^' + key + '=(.*)$', 'm'));
+    return m ? m[1].trim() : '';
+  } catch (e) { return ''; }
+}
+
+const SITE_URL = readConf('SITE_URL') || 'https://www.seribukafetrk.com';
+const BOT_TOKEN = readConf('TG_BOT_TOKEN');
+const CHAT_ID = readConf('TG_CHAT_ID');
+
+if (!BOT_TOKEN || !CHAT_ID) {
+  console.error('TG_BOT_TOKEN / TG_CHAT_ID kosong di /etc/vipies.conf');
+  process.exit(1);
+}
+
+function sendTelegram(msg) {
+  const body = JSON.stringify({ chat_id: CHAT_ID, text: msg, parse_mode: 'HTML' });
+  const req = https.request({
+    hostname: 'api.telegram.org',
+    path: '/bot' + BOT_TOKEN + '/sendMessage',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+  });
+  req.write(body);
+  req.end();
+}
+
+function getStats() {
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const memPct = (((totalMem - freeMem) / totalMem) * 100).toFixed(1);
+
+  const disk = execSync("df -h / | tail -1").toString().trim().split(/\s+/);
+  const diskStr = disk[2] + '/' + disk[1] + ' (' + disk[4] + ' used)';
+
+  const procs = JSON.parse(execSync('pm2 jlist 2>/dev/null').toString());
+  const pm2Lines = procs.map(function(p) {
+    const cpu = p.monit ? p.monit.cpu + '%' : 'N/A';
+    const mem = p.monit ? (p.monit.memory / 1024 / 1024).toFixed(1) + 'MB' : 'N/A';
+    return p.name + ': ' + p.pm2_env.status + ' (CPU ' + cpu + ', RAM ' + mem + ')';
+  }).join('\n');
+
+  const loadAvg = os.loadavg()[0].toFixed(2);
+
+  const u = os.uptime();
+  const uptime = Math.floor(u / 3600) + 'j ' + Math.floor((u % 3600) / 60) + 'm';
+
+  return { memPct: memPct, disk: diskStr, pm2Lines: pm2Lines, loadAvg: loadAvg, uptime: uptime };
+}
+
+function checkSite(stats) {
+  var done = false;
+  var req = https.get(SITE_URL, { agent: false }, function(res) {
+    done = true;
+    var s = res.statusCode === 200 ? '✅ Online' : '⚠️ Status ' + res.statusCode;
+    var msg = '📊 <b>Monitor ' + SITE_URL.replace(/^https?:\/\/(www\.)?/, '') + '</b>\n\n' +
+      '🌐 Site: ' + s + '\n\n' +
+      '⚙️ <b>Proses PM2:</b>\n' + stats.pm2Lines + '\n\n' +
+      '🧠 RAM Server: ' + stats.memPct + '%\n' +
+      '💾 Disk: ' + stats.disk + '\n' +
+      '📈 Load Avg: ' + stats.loadAvg + '\n' +
+      '⏱ Uptime: ' + stats.uptime;
+    sendTelegram(msg);
+  });
+  req.on('error', function(e) {
+    if (!done) {
+      done = true;
+      sendTelegram('🔴 <b>SITE DOWN!</b>\n' + e.message + '\n\n⚙️ Proses PM2:\n' + stats.pm2Lines);
+    }
+  });
+  req.setTimeout(10000, function() {
+    if (!done) {
+      done = true;
+      req.destroy();
+      sendTelegram('⏱️ <b>SITE TIMEOUT!</b>\nTidak merespons 10 detik.\n\n⚙️ Proses PM2:\n' + stats.pm2Lines);
+    }
+  });
+}
+
+try {
+  var stats = getStats();
+  checkSite(stats);
+} catch(e) {
+  sendTelegram('❌ Monitor error: ' + e.message);
+}
+MONJS
+chmod 755 /var/www/monitor.js
+ok "Monitor Node standalone dibuat (/var/www/monitor.js)"
+
 step "Memasang cron monitoring (tiap 30 menit)..."
 if ! crontab -l 2>/dev/null | grep -q 'vipies-monitor'; then
   ( crontab -l 2>/dev/null; echo "*/30 * * * * /usr/local/bin/vipies-monitor >/dev/null 2>&1" ) | crontab -
   ok "Cron monitoring aktif (tiap 30 menit)"
 else
   ok "Cron monitoring sudah ada"
+fi
+if ! crontab -l 2>/dev/null | grep -q '/var/www/monitor.js'; then
+  ( crontab -l 2>/dev/null; echo "*/30 * * * * node /var/www/monitor.js >> /var/log/monitor.log 2>&1" ) | crontab -
+  ok "Cron monitor Node aktif (/var/www/monitor.js)"
+else
+  ok "Cron monitor Node sudah ada"
 fi
 
 # Jalankan sekali untuk test
