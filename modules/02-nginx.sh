@@ -140,47 +140,108 @@ ok "Socket PHP-FPM template: $PHP_SOCK"
 cat > /usr/local/bin/vipies-add-site <<'HELPER'
 #!/bin/bash
 # vipies — tambah website baru (config nginx saja)
-# Usage: vipies-add-site <domain> <wp|custom|static> [port]
+# Usage: vipies-add-site <domain> <wp|static> [www|nowww|subdomain]
+#
+#   Mode (opsional, default: www):
+#     www       = default — serve www + non-www redirect ke www
+#     nowww     = bare domain saja (tanpa www)
+#     subdomain = sama dengan nowww (tidak ada www untuk subdomain)
+#
 #   wp     = WordPress (PHP-FPM)
-#   custom = backend app (proxy ke 127.0.0.1:PORT)
-#   static = HTML/CSS/JS statis (tanpa backend, tanpa port)
+#   static = HTML/CSS/JS statis
 #   SSL: jalankan terpisah setelah DNS pointing → vipies-cert <domain>
 set -euo pipefail
-DOMAIN="$1"; TYPE="${2:-custom}"; PORT="${3:-4000}"
-TMPL="/etc/nginx/templates/${TYPE}.conf"
-# alias: wp -> wordpress.conf
-if [ ! -f "$TMPL" ] && [ "$TYPE" = "wp" ]; then
-  TMPL="/etc/nginx/templates/wordpress.conf"
-fi
-[ -f "$TMPL" ] || { echo "Template '$TYPE' tidak ada (wp|custom)"; exit 1; }
+
+DOMAIN="${1:-}"
+TYPE="${2:-static}"
+MODE="${3:-www}"
+
+[ -z "$DOMAIN" ] && { echo "Usage: vipies-add-site <domain> <wp|static> [www|nowww|subdomain]"; exit 1; }
+
+# Normalisasi mode: subdomain = nowww
+[ "$MODE" = "subdomain" ] && MODE="nowww"
+
+# Pilih template berdasarkan type + mode
+case "${TYPE}:${MODE}" in
+  wp:www)     TMPL="/etc/nginx/templates/wordpress.conf" ;;
+  wp:nowww)   TMPL="/etc/nginx/templates/wordpress-nowww.conf" ;;
+  static:www) TMPL="/etc/nginx/templates/static.conf" ;;
+  static:nowww) TMPL="/etc/nginx/templates/static-nowww.conf" ;;
+  # alias: wp -> wordpress.conf
+  *)
+    if [ "$TYPE" = "wp" ] && [ -f "/etc/nginx/templates/wordpress.conf" ]; then
+      TMPL="/etc/nginx/templates/wordpress.conf"
+    else
+      echo "Template '$TYPE' tidak ada (wp|static), mode '$MODE' tidak valid (www|nowww|subdomain)"
+      exit 1
+    fi
+    ;;
+esac
+
+[ -f "$TMPL" ] || { echo "Template tidak ditemukan: $TMPL"; exit 1; }
 [ -d "/var/www/$DOMAIN" ] || mkdir -p "/var/www/$DOMAIN"
 
-# Generate config nginx dari template.
-# Kalau cert SSL belum ada, buat versi HTTP-only (hapus blok 443) biar nginx tetap valid.
+echo "  → Mode: $MODE (template: $(basename $TMPL))"
+
+# Generate config nginx dari template
 HAS_CERT=0
 [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ] && HAS_CERT=1
-sed -e "s/__DOMAIN__/$DOMAIN/g" -e "s/__PORT__/$PORT/g" "$TMPL" > "/etc/nginx/sites-available/$DOMAIN"
+
+if [ "$MODE" = "www" ]; then
+  # Mode www: serve www.__DOMAIN__ utama, __DOMAIN__ redirect ke www
+  sed -e "s/__DOMAIN__/$DOMAIN/g" "$TMPL" | \
+    sed -e "s/server_name $DOMAIN;/server_name www.$DOMAIN $DOMAIN;/" \
+    > "/etc/nginx/sites-available/$DOMAIN"
+  # Tambah blok redirect non-www -> www di depan (ganti blok 80 existing)
+  python3 - "$DOMAIN" << 'PYEOF'
+import re, sys
+domain = sys.argv[1]
+p = f"/etc/nginx/sites-available/{domain}"
+s = open(p).read()
+
+# Ganti blok server 80: jadikan redirect non-www -> www (bukan ke https bare)
+redir_block = f"""server {{
+    listen 80;
+    server_name {domain} www.{domain};
+    return 301 https://www.{domain}$request_uri;
+}}"""
+s = re.sub(r'server \{\s*\n\s*listen 80;.*?return 301 https?://[^;]+;?\s*\n\}',
+           redir_block, s, flags=re.S)
+
+# Pastikan blok 443 server_name mencakup www + non-www
+s = re.sub(r'(listen 443 ssl http2;\s*\n\s*server_name )([^;]+);',
+           r'\1www.' + domain + ' ' + domain + ';', s)
+
+open(p, 'w').write(s)
+PYEOF
+else
+  # Mode nowww: serve bare domain saja
+  sed -e "s/__DOMAIN__/$DOMAIN/g" "$TMPL" > "/etc/nginx/sites-available/$DOMAIN"
+fi
+
+# HTTP-only jika belum ada cert SSL
 if [ "$HAS_CERT" = "0" ] && grep -q "listen 443" "/etc/nginx/sites-available/$DOMAIN"; then
-  python3 - "$DOMAIN" <<'PYEOF'
+  python3 - "$DOMAIN" << 'PYEOF'
 import re, sys
 p = f"/etc/nginx/sites-available/{sys.argv[1]}"
 s = open(p).read()
-# Hapus blok server 443 SSL (cert belum ada) — nginx tetap valid HTTP-only
 s = re.sub(r'server \{\s*\n\s*listen 443 ssl.*?\n\}', '# (blok 443 nonaktif — belum ada cert)', s, flags=re.S)
 open(p, 'w').write(s)
 PYEOF
   echo "  → Config HTTP-only (belum ada cert SSL)"
 fi
+
 ln -sfn "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
 
-# Reload nginx (config HTTP-only selalu valid tanpa cert)
-if nginx -t >/dev/null 2>&1; then
+if nginx -t > /dev/null 2>&1; then
   systemctl reload nginx
-  echo "✓ Site $DOMAIN dibuat ($TYPE, HTTP) + nginx reload"
+  echo "✓ Site $DOMAIN dibuat ($TYPE, mode: $MODE) + nginx reload"
   echo "  Setelah DNS pointing, pasang SSL: vipies-cert $DOMAIN"
 else
+  nginx -t
   echo "⚠ Site $DOMAIN dibuat, TAPI nginx belum reload — cek: nginx -t"
 fi
+
 HELPER
 chmod +x /usr/local/bin/vipies-add-site
 

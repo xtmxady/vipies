@@ -69,11 +69,21 @@ WWW_IP=""
 WWW_IP=$(getent ahostsv4 "www.$DOMAIN" 2>/dev/null | awk '{print $1}' | head -1) || true
 [ -z "$WWW_IP" ] && WWW_IP=$(dig +short @1.1.1.1 "www.$DOMAIN" A 2>/dev/null | head -1) || true
 [ -z "$WWW_IP" ] && WWW_IP=$(dig +short @8.8.8.8 "www.$DOMAIN" A 2>/dev/null | head -1) || true
-if [ -n "$WWW_IP" ] && [ "$WWW_IP" = "$MYIP" ]; then
-  echo "  → www.$DOMAIN pointing OK — sertakan www"
+# Deteksi mode dari nginx config: www (default) atau nowww
+NGINX_CONF="/etc/nginx/sites-available/$DOMAIN"
+WANTS_WWW=0
+if grep -q "server_name www\.$DOMAIN" "$NGINX_CONF" 2>/dev/null; then
+  WANTS_WWW=1
+fi
+
+if [ "$WANTS_WWW" = "1" ] && [ -n "$WWW_IP" ] && [ "$WWW_IP" = "$MYIP" ]; then
+  echo "  → Mode www — www.$DOMAIN pointing OK — sertakan www"
   CERT_DOMAINS=(-d "$DOMAIN" -d "www.$DOMAIN")
+elif [ "$WANTS_WWW" = "1" ] && [ -z "$WWW_IP" ]; then
+  echo "  → Mode www — www.$DOMAIN belum pointing — cert untuk $DOMAIN saja (tambah www setelah DNS siap)"
+  CERT_DOMAINS=(-d "$DOMAIN")
 else
-  echo "  → www.$DOMAIN tidak ada/belum pointing — cert untuk $DOMAIN saja"
+  echo "  → Mode nowww/subdomain — cert untuk $DOMAIN saja"
   CERT_DOMAINS=(-d "$DOMAIN")
 fi
 echo "  → Request cert via certbot..."
