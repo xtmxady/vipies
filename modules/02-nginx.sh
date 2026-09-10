@@ -148,7 +148,7 @@ cat > /usr/local/bin/vipies-add-site <<'HELPER'
 #
 #   wp     = WordPress (PHP-FPM)
 #   static = HTML/CSS/JS statis
-#   SSL: jalankan terpisah setelah DNS pointing → vipies-cert <domain>
+#   SSL: otomatis via auto-cert (cron 5 menit) atau manual vipies-cert
 set -euo pipefail
 
 DOMAIN="${1:-}"
@@ -171,41 +171,16 @@ IS_SUBDOMAIN=0
 [ "$MODE" = "subdomain" ] && IS_SUBDOMAIN=1
 
 # Generate config nginx dari template
-HAS_CERT=0
-[ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ] && HAS_CERT=1
-
 sed -e "s/__DOMAIN__/$DOMAIN/g" "$TMPL" > "/etc/nginx/sites-available/$DOMAIN"
 
 if [ "$IS_SUBDOMAIN" = "0" ]; then
-  # Domain utama: tambah www ke server_name blok 443 + redirect blok 80 cover www juga
+  # Domain utama: server_name cover www + non-www.
+  # Blok serve tetap satu; certbot --nginx yang menambah redirect
+  # (non-www → www) otomatis saat request cert.
   echo "  → Mode domain utama (www + non-www)"
-  python3 - "$DOMAIN" << 'PYEOF'
-import re, sys
-domain = sys.argv[1]
-p = f"/etc/nginx/sites-available/{domain}"
-s = open(p).read()
-# Blok 80: redirect both www + non-www ke https://www.<domain>
-redir = f"server {{\n    listen 80;\n    server_name {domain} www.{domain};\n    return 301 https://www.{domain}$request_uri;\n}}"
-s = re.sub(r'server \{\s*\n\s*listen 80;.*?return 301[^;]+;\s*\n\}', redir, s, flags=re.S)
-# Blok 443: server_name cover www + non-www
-s = re.sub(r'(listen 443 ssl http2;\s*\n\s*server_name )([^;]+);',
-           r'\g<1>www.' + domain + ' ' + domain + ';', s)
-open(p, 'w').write(s)
-PYEOF
+  sed -i "s/server_name $DOMAIN;/server_name www.$DOMAIN $DOMAIN;/" "/etc/nginx/sites-available/$DOMAIN"
 else
   echo "  → Mode subdomain (non-www only)"
-fi
-
-# HTTP-only jika belum ada cert SSL
-if [ "$HAS_CERT" = "0" ] && grep -q "listen 443" "/etc/nginx/sites-available/$DOMAIN"; then
-  python3 - "$DOMAIN" << 'PYEOF'
-import re, sys
-p = f"/etc/nginx/sites-available/{sys.argv[1]}"
-s = open(p).read()
-s = re.sub(r'server \{\s*\n\s*listen 443 ssl.*?\n\}', '# (blok 443 nonaktif — belum ada cert)', s, flags=re.S)
-open(p, 'w').write(s)
-PYEOF
-  echo "  → Config HTTP-only (belum ada cert SSL)"
 fi
 
 ln -sfn "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
@@ -213,12 +188,11 @@ ln -sfn "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
 if nginx -t > /dev/null 2>&1; then
   systemctl reload nginx
   echo "✓ Site $DOMAIN dibuat ($TYPE, mode: ${MODE:-www}) + nginx reload"
-  echo "  Setelah DNS pointing, pasang SSL: vipies-cert $DOMAIN"
+  echo "  SSL otomatis ~5 menit setelah DNS pointing (auto-cert)"
 else
   nginx -t
   echo "⚠ Site $DOMAIN dibuat, TAPI nginx belum reload — cek: nginx -t"
 fi
-
 HELPER
 chmod +x /usr/local/bin/vipies-add-site
 

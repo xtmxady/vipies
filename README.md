@@ -140,19 +140,38 @@ Restored automatically: **Hermes** (`~/.hermes/` — config, memories, skills, c
 
 > ⚠️ Hermes is installed via the official installer (`curl ... install.sh | bash`) — **not** an npm package. 9router & PM2 via `npm i -g`.
 
+## 🔐 Auto-SSL (auto-cert)
+
+After module 17, SSL is automatic — no need to run `vipies-cert` manually.
+
+**How it works:**
+- `/root/auto-cert.sh` runs every 5 min via cron
+- Checks all nginx domains without certs
+- If DNS points to this server → auto-request certbot
+- Auto-renew active (certbot timer)
+
+**Workflow:**
+```bash
+# 1. Create site
+vipies-new-site example.com           # WordPress
+vipies-new-site example.com static    # Static
+
+# 2. Point DNS (A record → server IP)
+# 3. Wait ~5 min → SSL auto ✅
+```
+
+**Manual (optional):** `vipies-cert example.com` still works for instant cert.
+
 ## 🛠️ CLI Helpers (available after install)
 
 ```bash
 # Add a new website:
 # 1) WordPress (Nginx + DB + WP core + wp-config + permissions):
 vipies-new-site example.com               # domain utama (www + non-www)
-vipies-new-site example.com "" "" "" subdomain  # subdomain (non-www only)
+vipies-new-site example.com wp "" "" "" subdomain  # subdomain (non-www only)
 # 2) Static site (Nginx config only, HTML/CSS/JS):
 vipies-new-site example.com static        # domain utama
 vipies-new-site app.example.com static subdomain  # subdomain
-
-# 3) Enable SSL — run AFTER DNS points (A record → server IP):
-vipies-cert example.com                      # checks DNS first, then certbot
 
 # Manage MySQL databases
 vipies-db create mydb myuser mypass         # create DB + user

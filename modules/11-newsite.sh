@@ -39,8 +39,8 @@ if [ "$TYPE" = "static" ]; then
   else
     echo "    1) Point DNS $DOMAIN ke IP server ini"
   fi
-  echo "    2) Pasang SSL: vipies-cert $DOMAIN"
-  echo "    3) Upload file ke $WEBROOT"
+  echo "    2) Upload file ke $WEBROOT"
+  echo "    3) SSL otomatis (~5 menit setelah DNS pointing)"
   echo "=============================================="
   exit 0
 fi
@@ -95,8 +95,8 @@ if [ -z "$MODE" ]; then
 else
   echo "    1) Point DNS $DOMAIN ke IP server ini"
 fi
-echo "    2) Pasang SSL: vipies-cert $DOMAIN"
-echo "    3) Install WP: buka https://$DOMAIN di browser"
+echo "    2) Install WP: buka https://$DOMAIN di browser"
+echo "    3) SSL otomatis (~5 menit setelah DNS pointing)"
 echo "=============================================="
 HELPER
 chmod +x /usr/local/bin/vipies-new-site

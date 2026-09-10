@@ -145,19 +145,38 @@ Yang di-restore otomatis: **Hermes** (`~/.hermes/` — config, memories, skills,
 
 > ⚠️ Hermes diinstall via installer resmi (`curl ... install.sh | bash`) — **bukan** npm package. 9router & PM2 via `npm i -g`.
 
+## 🔐 Auto-SSL (auto-cert)
+
+Setelah modul 17, SSL otomatis — tidak perlu ketik `vipies-cert` manual.
+
+**Cara kerja:**
+- `/root/auto-cert.sh` jalan tiap 5 menit via cron
+- Cek semua domain di nginx yang belum punya cert
+- Kalau DNS sudah pointing ke server ini → auto-request certbot
+- Auto-renew aktif (certbot timer)
+
+**Flow baru:**
+```bash
+# 1. Buat situs baru
+vipies-new-site example.com           # WordPress
+vipies-new-site example.com static    # Static
+
+# 2. Point DNS (A record → IP server)
+# 3. Tunggu ~5 menit → SSL otomatis ✅
+```
+
+**Manual (opsional):** `vipies-cert example.com` — masih bisa dipakai kalau mau langsung.
+
 ## 🛠️ CLI Helpers (tersedia setelah install)
 
 ```bash
 # Tambah situs baru:
 # 1) WordPress (Nginx + DB + WP core + wp-config + permission):
 vipies-new-site example.com               # domain utama (www + non-www)
-vipies-new-site example.com "" "" "" subdomain  # subdomain (non-www only)
+vipies-new-site example.com wp "" "" "" subdomain  # subdomain (non-www only)
 # 2) Static (Nginx saja, HTML/CSS/JS):
 vipies-new-site example.com static        # domain utama
 vipies-new-site app.example.com static subdomain  # subdomain
-
-# 3) Pasang SSL — WAJIB setelah DNS pointing (A record → IP server):
-vipies-cert example.com                      # cek DNS dulu, lalu certbot Let's Encrypt
 
 # Kelola database MySQL
 vipies-db create mydb myuser mypass         # buat DB + user

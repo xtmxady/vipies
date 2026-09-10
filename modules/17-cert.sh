@@ -92,4 +92,61 @@ HELPER
 chmod +x /usr/local/bin/vipies-cert
 ok "Helper 'vipies-cert' terpasang — jalankan setelah DNS pointing: vipies-cert <domain>"
 
+# Auto-cert script + cron
+step "Memasang auto-cert (auto-SSL)..."
+cat > /root/auto-cert.sh << 'AUTOCERT'
+#!/bin/bash
+# auto-cert.sh — otomatis pasang SSL untuk domain baru
+# Cron: */5 * * * * bash /root/auto-cert.sh >> /var/log/auto-cert.log 2>&1
+set -euo pipefail
+
+MYIP=$(hostname -I | awk '{print $1}')
+LOCK="/tmp/auto-cert.lock"
+
+[ -f "$LOCK" ] && { age=$(( $(date +%s) - $(stat -c %Y "$LOCK" 2>/dev/null || echo 0) )); [ "$age" -lt 300 ] && exit 0; }
+echo $$ > "$LOCK"
+trap 'rm -f "$LOCK"' EXIT
+
+resolvectl flush-caches 2>/dev/null || true
+
+for CONF in /etc/nginx/sites-enabled/*; do
+  [ -f "$CONF" ] || continue
+  [ -L "$CONF" ] || continue
+  DOMAIN=$(basename "$CONF")
+  # Skip non-domain: default, tanpa titik, mulai digit, backup file
+  case "$DOMAIN" in default|_*|*.bak|*..*) continue ;; esac
+  case "$DOMAIN" in *.*) ;; *) continue ;; esac
+  case "$DOMAIN" in [0-9]*|-*) continue ;; esac
+  [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ] && continue
+
+  RESOLVED=$(getent ahostsv4 "$DOMAIN" 2>/dev/null | awk '{print $1}' | head -1)
+  [ -z "$RESOLVED" ] && RESOLVED=$(dig +short @1.1.1.1 "$DOMAIN" A 2>/dev/null | head -1)
+  [ -z "$RESOLVED" ] && continue
+
+  if [ "$RESOLVED" = "$MYIP" ]; then
+    echo "$(date '+%F %T') | 🔒 Auto-cert: $DOMAIN DNS OK — requesting cert..."
+    WWW_IP=$(getent ahostsv4 "www.$DOMAIN" 2>/dev/null | awk '{print $1}' | head -1) || true
+    [ -z "$WWW_IP" ] && WWW_IP=$(dig +short @1.1.1.1 "www.$DOMAIN" A 2>/dev/null | head -1) || true
+    CERT_DOMAINS=(-d "$DOMAIN")
+    if [ -n "$WWW_IP" ] && [ "$WWW_IP" = "$MYIP" ]; then
+      CERT_DOMAINS=(-d "$DOMAIN" -d "www.$DOMAIN")
+    fi
+    if certbot --nginx "${CERT_DOMAINS[@]}" --non-interactive --agree-tos --redirect --email "admin@$DOMAIN" 2>&1; then
+      echo "$(date '+%F %T') | ✅ Auto-cert: $DOMAIN — SSL aktif"
+      systemctl reload nginx
+    else
+      echo "$(date '+%F %T') | ⚠️ Auto-cert: $DOMAIN — certbot gagal"
+    fi
+  fi
+done
+AUTOCERT
+chmod +x /root/auto-cert.sh
+
+if ! crontab -l 2>/dev/null | grep -q 'auto-cert.sh'; then
+  ( crontab -l 2>/dev/null; echo "*/5 * * * * bash /root/auto-cert.sh >> /var/log/auto-cert.log 2>&1" ) | crontab -
+  ok "Cron auto-cert dipasang: */5 * * * *"
+else
+  ok "Cron auto-cert sudah ada"
+fi
+
 ok "Module 17 selesai."
