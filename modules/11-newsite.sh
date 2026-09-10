@@ -17,15 +17,15 @@ cat > /usr/local/bin/vipies-new-site <<'HELPER'
 set -euo pipefail
 
 DOMAIN="$1"
-[ -z "$DOMAIN" ] && { echo "Usage: vipies-new-site <domain> [dbname] [dbuser] [dbpass] [www|nowww|subdomain]"; exit 1; }
+[ -z "$DOMAIN" ] && { echo "Usage: vipies-new-site <domain> [dbname] [dbuser] [dbpass] [subdomain]"; exit 1; }
 SLUG=$(echo "$DOMAIN" | tr '.-' '__')
 DBNAME="${2:-wp_${SLUG}}"
 DBUSER="${3:-${SLUG}}"
 DBPASS="${4:-$(openssl rand -hex 12)}"
-MODE="${5:-www}"
+MODE="${5:-}"
 WEBROOT="/var/www/$DOMAIN"
 
-echo "=== [1/6] Nginx config (mode: $MODE) ==="
+echo "=== [1/6] Nginx config ==="
 vipies-add-site "$DOMAIN" wp "$MODE"
 # Ganti root di config Nginx agar mengarah ke WEBROOT (template root /var/www/<domain> sudah benar)
 
@@ -61,10 +61,10 @@ echo "✅ Situs WordPress '$DOMAIN' siap!"
 echo "  Root:      $WEBROOT"
 echo "  DB:        $DBNAME (user $DBUSER)"
 echo "  DB pass:   $DBPASS       <-- simpan! di /root/r2-sites.conf"
-echo "  Mode:      $MODE"
+echo "  Mode:      ${MODE:-www (domain utama)}"
 echo ""
 echo "  Langkah terakhir:"
-if [ "$MODE" = "www" ]; then
+if [ -z "$MODE" ]; then
 echo "    1) Point DNS $DOMAIN + www.$DOMAIN ke IP server ini"
 else
 echo "    1) Point DNS $DOMAIN ke IP server ini"
