@@ -11,14 +11,14 @@ step "Memasang helper 'vipies-new-site'..."
 cat > /usr/local/bin/vipies-new-site << 'HELPER'
 #!/bin/bash
 # vipies-new-site — buat situs baru (WordPress atau Static).
-# Usage: vipies-new-site <domain> [wp|static] [dbname] [dbuser] [dbpass] [subdomain]
+# Usage: vipies-new-site <domain> [wp|static] [dbname] [dbuser] [dbpass] [nonwww]
 #   Tipe default: wp
 #   Mode default: domain utama (www + non-www)
 #   dbname/dbuser/dbpass: optional, dibuat otomatis dari domain (WP only)
 set -euo pipefail
 
 DOMAIN="${1:-}"
-[ -z "$DOMAIN" ] && { echo "Usage: vipies-new-site <domain> [wp|static] [dbname] [dbuser] [dbpass] [subdomain]"; exit 1; }
+[ -z "$DOMAIN" ] && { echo "Usage: vipies-new-site <domain> [wp|static] [dbname] [dbuser] [dbpass] [nonwww]"; exit 1; }
 TYPE="${2:-wp}"
 WEBROOT="/var/www/$DOMAIN"
 

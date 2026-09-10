@@ -168,10 +168,10 @@ vipies-new-site example.com static    # Static
 # Add a new website:
 # 1) WordPress (Nginx + DB + WP core + wp-config + permissions):
 vipies-new-site example.com               # domain utama (www + non-www)
-vipies-new-site example.com wp "" "" "" subdomain  # subdomain (non-www only)
+vipies-new-site example.com wp "" "" "" nonwww  # subdomain (non-www only)
 # 2) Static site (Nginx config only, HTML/CSS/JS):
 vipies-new-site example.com static        # domain utama
-vipies-new-site app.example.com static subdomain  # subdomain
+vipies-new-site app.example.com static nonwww  # subdomain
 
 # Manage MySQL databases
 vipies-db create mydb myuser mypass         # create DB + user

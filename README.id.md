@@ -173,10 +173,10 @@ vipies-new-site example.com static    # Static
 # Tambah situs baru:
 # 1) WordPress (Nginx + DB + WP core + wp-config + permission):
 vipies-new-site example.com               # domain utama (www + non-www)
-vipies-new-site example.com wp "" "" "" subdomain  # subdomain (non-www only)
+vipies-new-site example.com wp "" "" "" nonwww  # subdomain (non-www only)
 # 2) Static (Nginx saja, HTML/CSS/JS):
 vipies-new-site example.com static        # domain utama
-vipies-new-site app.example.com static subdomain  # subdomain
+vipies-new-site app.example.com static nonwww  # subdomain
 
 # Kelola database MySQL
 vipies-db create mydb myuser mypass         # buat DB + user

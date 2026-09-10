@@ -140,11 +140,11 @@ ok "Socket PHP-FPM template: $PHP_SOCK"
 cat > /usr/local/bin/vipies-add-site <<'HELPER'
 #!/bin/bash
 # vipies — tambah website baru (config nginx saja)
-# Usage: vipies-add-site <domain> <wp|static> [subdomain]
+# Usage: vipies-add-site <domain> <wp|static> [nonwww]
 #
-#   Mode (opsional):
-#     (kosong)  = domain utama — www + non-www, cert cover keduanya
-#     subdomain = non-www only (tidak ada www block)
+#   Mode (opsional, default www + non-www):
+#     nonwww = non-www only (tidak ada www block) — untuk subdomain
+#              atau domain yang tidak mau www
 #
 #   wp     = WordPress (PHP-FPM)
 #   static = HTML/CSS/JS statis
@@ -155,7 +155,7 @@ DOMAIN="${1:-}"
 TYPE="${2:-static}"
 MODE="${3:-}"
 
-[ -z "$DOMAIN" ] && { echo "Usage: vipies-add-site <domain> <wp|static> [subdomain]"; exit 1; }
+[ -z "$DOMAIN" ] && { echo "Usage: vipies-add-site <domain> <wp|static> [nonwww]"; exit 1; }
 
 # Pilih template
 case "$TYPE" in
@@ -167,8 +167,10 @@ esac
 [ -f "$TMPL" ] || { echo "Template tidak ditemukan: $TMPL"; exit 1; }
 [ -d "/var/www/$DOMAIN" ] || mkdir -p "/var/www/$DOMAIN"
 
+# Kompatibilitas: subdomain lama = nonwww
+[ "$MODE" = "subdomain" ] && MODE="nonwww"
 IS_SUBDOMAIN=0
-[ "$MODE" = "subdomain" ] && IS_SUBDOMAIN=1
+[ "$MODE" = "nonwww" ] && IS_SUBDOMAIN=1
 
 # Generate config nginx dari template
 sed -e "s/__DOMAIN__/$DOMAIN/g" "$TMPL" > "/etc/nginx/sites-available/$DOMAIN"
@@ -180,7 +182,7 @@ if [ "$IS_SUBDOMAIN" = "0" ]; then
   echo "  → Mode domain utama (www + non-www)"
   sed -i "s/server_name $DOMAIN;/server_name www.$DOMAIN $DOMAIN;/" "/etc/nginx/sites-available/$DOMAIN"
 else
-  echo "  → Mode subdomain (non-www only)"
+  echo "  → Mode non-www (tanpa www)"
 fi
 
 ln -sfn "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
