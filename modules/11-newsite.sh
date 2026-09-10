@@ -1,33 +1,59 @@
 #!/bin/bash
 # ============================================================
 #  vipies — 11-newsite.sh
-#  Helper 'vipies-new-site' — buat situs WordPress lengkap
-#  dalam satu perintah: Nginx + DB + WP install + permission.
+#  Helper 'vipies-new-site' — buat situs baru (WordPress atau Static).
 # ============================================================
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source modules/lib.sh
 
 step "Memasang helper 'vipies-new-site'..."
-cat > /usr/local/bin/vipies-new-site <<'HELPER'
+cat > /usr/local/bin/vipies-new-site << 'HELPER'
 #!/bin/bash
-# vipies-new-site — buat situs WordPress baru secara lengkap.
-# Usage: vipies-new-site <domain> [dbname] [dbuser] [dbpass]
-#   dbname/dbuser/dbpass optional — kalau kosong, dibuat otomatis dari domain.
+# vipies-new-site — buat situs baru (WordPress atau Static).
+# Usage: vipies-new-site <domain> [wp|static] [dbname] [dbuser] [dbpass] [subdomain]
+#   Tipe default: wp
+#   Mode default: domain utama (www + non-www)
+#   dbname/dbuser/dbpass: optional, dibuat otomatis dari domain (WP only)
 set -euo pipefail
 
-DOMAIN="$1"
-[ -z "$DOMAIN" ] && { echo "Usage: vipies-new-site <domain> [dbname] [dbuser] [dbpass] [subdomain]"; exit 1; }
-SLUG=$(echo "$DOMAIN" | tr '.-' '__')
-DBNAME="${2:-wp_${SLUG}}"
-DBUSER="${3:-${SLUG}}"
-DBPASS="${4:-$(openssl rand -hex 12)}"
-MODE="${5:-}"
+DOMAIN="${1:-}"
+[ -z "$DOMAIN" ] && { echo "Usage: vipies-new-site <domain> [wp|static] [dbname] [dbuser] [dbpass] [subdomain]"; exit 1; }
+TYPE="${2:-wp}"
 WEBROOT="/var/www/$DOMAIN"
+
+if [ "$TYPE" = "static" ]; then
+  MODE="${3:-}"
+  echo "=== [1/2] Nginx config (static) ==="
+  vipies-add-site "$DOMAIN" static "$MODE"
+  mkdir -p "$WEBROOT"
+  echo ""
+  echo "=============================================="
+  echo "✅ Situs Static '$DOMAIN' siap!"
+  echo "  Root:      $WEBROOT"
+  echo "  Mode:      ${MODE:-www (domain utama)}"
+  echo ""
+  echo "  Langkah terakhir:"
+  if [ -z "$MODE" ]; then
+    echo "    1) Point DNS $DOMAIN + www.$DOMAIN ke IP server ini"
+  else
+    echo "    1) Point DNS $DOMAIN ke IP server ini"
+  fi
+  echo "    2) Pasang SSL: vipies-cert $DOMAIN"
+  echo "    3) Upload file ke $WEBROOT"
+  echo "=============================================="
+  exit 0
+fi
+
+# Mode WordPress
+SLUG=$(echo "$DOMAIN" | tr '.-' '__')
+DBNAME="${3:-wp_${SLUG}}"
+DBUSER="${4:-${SLUG}}"
+DBPASS="${5:-$(openssl rand -hex 12)}"
+MODE="${6:-}"
 
 echo "=== [1/6] Nginx config ==="
 vipies-add-site "$DOMAIN" wp "$MODE"
-# Ganti root di config Nginx agar mengarah ke WEBROOT (template root /var/www/<domain> sudah benar)
 
 echo "=== [2/6] Database & user ==="
 if ! mysql -u root -e "USE \`$DBNAME\`" 2>/dev/null; then
@@ -39,10 +65,10 @@ fi
 
 echo "=== [3/6] Download WordPress ==="
 mkdir -p "$WEBROOT"
-wp core download --path="$WEBROOT" --allow-root >/dev/null 2>&1 || { echo "  ✗ Gagal download WP"; exit 1; }
+wp core download --path="$WEBROOT" --allow-root > /dev/null 2>&1 || { echo "  ✗ Gagal download WP"; exit 1; }
 
 echo "=== [4/6] Buat wp-config ==="
-wp config create --path="$WEBROOT" --dbname="$DBNAME" --dbuser="$DBUSER" --dbpass="$DBPASS" --allow-root >/dev/null 2>&1
+wp config create --path="$WEBROOT" --dbname="$DBNAME" --dbuser="$DBUSER" --dbpass="$DBPASS" --allow-root > /dev/null 2>&1
 
 echo "=== [5/6] Permission www-data ==="
 chown -R www-data:www-data "$WEBROOT"
@@ -65,9 +91,9 @@ echo "  Mode:      ${MODE:-www (domain utama)}"
 echo ""
 echo "  Langkah terakhir:"
 if [ -z "$MODE" ]; then
-echo "    1) Point DNS $DOMAIN + www.$DOMAIN ke IP server ini"
+  echo "    1) Point DNS $DOMAIN + www.$DOMAIN ke IP server ini"
 else
-echo "    1) Point DNS $DOMAIN ke IP server ini"
+  echo "    1) Point DNS $DOMAIN ke IP server ini"
 fi
 echo "    2) Pasang SSL: vipies-cert $DOMAIN"
 echo "    3) Install WP: buka https://$DOMAIN di browser"

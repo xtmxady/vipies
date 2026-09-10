@@ -70,7 +70,7 @@ sudo bash setup.sh
 | Modul | Fungsi |
 |-------|--------|
 | 01-system | Update sistem + paket inti + UFW (22/80/443) |
-| 02-nginx | Install Nginx + template WP/Custom + helper `vipies-add-site` |
+| 02-nginx | Install Nginx + template WP/Custom/Static |
 | 03-node | Node.js (versi bisa dipilih) + PM2 + auto-start |
 | 04-php | PHP-FPM + OPcache + ekstensi |
 | 05-mysql | Install MySQL + password root + `/root/.my.cnf` |
@@ -90,7 +90,7 @@ sudo bash setup.sh
 systemctl status nginx mysql php*-fpm    # semua aktif
 pm2 status                                # PM2 berjalan
 vipies-db create testdb testuser testpass # tes helper MySQL
-vipies-add-site example.com wp            # tes helper situs
+vipies-new-site example.com wp            # tes helper situs
 vipies-monitor                            # tes notifikasi Telegram
 # Cek Telegram: harus muncul "MONITOR VIPIES — all healthy"
 ```
@@ -148,15 +148,13 @@ Yang di-restore otomatis: **Hermes** (`~/.hermes/` — config, memories, skills,
 ## 🛠️ CLI Helpers (tersedia setelah install)
 
 ```bash
-# Tambah situs baru — pilih sesuai kebutuhan:
-# 1) WordPress LENGKAP (Nginx + DB + WP core + wp-config + permission): disarankan
-vipies-new-site example.com
-# 2) Hanya config Nginx (custom/Node, atau WP manual):
-vipies-add-site example.com wp               # config Nginx WP
-vipies-add-site api.example.com custom 4000  # config Nginx custom/Node di port 4000
-vipies-add-site example.com static           # config Nginx STATIS (HTML/CSS/JS saja, tanpa port)
-#    Catatan: 'wp' otomatis → template wordpress.conf; config dibuat HTTP-only
-#    (blok 443 dihapus) kalau cert belum ada biar nginx tetap valid
+# Tambah situs baru:
+# 1) WordPress (Nginx + DB + WP core + wp-config + permission):
+vipies-new-site example.com               # domain utama (www + non-www)
+vipies-new-site example.com "" "" "" subdomain  # subdomain (non-www only)
+# 2) Static (Nginx saja, HTML/CSS/JS):
+vipies-new-site example.com static        # domain utama
+vipies-new-site app.example.com static subdomain  # subdomain
 
 # 3) Pasang SSL — WAJIB setelah DNS pointing (A record → IP server):
 vipies-cert example.com                      # cek DNS dulu, lalu certbot Let's Encrypt

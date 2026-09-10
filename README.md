@@ -70,7 +70,7 @@ sudo bash setup.sh
 | Module | What it does |
 |--------|-------------|
 | 01-system | System update + core packages + UFW (22/80/443) |
-| 02-nginx | Nginx install + WP/Custom templates + `vipies-add-site` helper |
+| 02-nginx | Nginx install + WP/Custom/Static templates |
 | 03-node | Node.js (selectable version) + PM2 + auto-start |
 | 04-php | PHP-FPM + OPcache + extensions |
 | 05-mysql | MySQL install + root password + `/root/.my.cnf` |
@@ -90,7 +90,7 @@ sudo bash setup.sh
 systemctl status nginx mysql php*-fpm    # all active
 pm2 status                                # PM2 running
 vipies-db create testdb testuser testpass # test MySQL helper
-vipies-add-site example.com wp            # test site helper
+vipies-new-site example.com wp            # test site helper
 vipies-monitor                            # test Telegram notification
 # Check Telegram: you should see "MONITOR VIPIES — all healthy"
 ```
@@ -143,15 +143,13 @@ Restored automatically: **Hermes** (`~/.hermes/` — config, memories, skills, c
 ## 🛠️ CLI Helpers (available after install)
 
 ```bash
-# Add a new website — pick what you need:
-# 1) FULL WordPress (Nginx + DB + WP core + wp-config + permissions): recommended
-vipies-new-site example.com
-# 2) Nginx config only (custom/Node, or manual WP):
-vipies-add-site example.com wp               # WP nginx config
-vipies-add-site api.example.com custom 4000  # custom/Node nginx config on port 4000
-vipies-add-site example.com static           # STATIC site config (HTML/CSS/JS only, no port)
-#    Note: 'wp' auto-maps to wordpress.conf; config is HTTP-only
-#    (443 block removed) when no cert yet, so nginx stays valid
+# Add a new website:
+# 1) WordPress (Nginx + DB + WP core + wp-config + permissions):
+vipies-new-site example.com               # domain utama (www + non-www)
+vipies-new-site example.com "" "" "" subdomain  # subdomain (non-www only)
+# 2) Static site (Nginx config only, HTML/CSS/JS):
+vipies-new-site example.com static        # domain utama
+vipies-new-site app.example.com static subdomain  # subdomain
 
 # 3) Enable SSL — run AFTER DNS points (A record → server IP):
 vipies-cert example.com                      # checks DNS first, then certbot
