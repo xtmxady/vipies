@@ -28,8 +28,9 @@ fix_perm() {
   local path="$1"
   [ -e "$path" ] || return 0
   chown -R www-data:www-data "$path" 2>/dev/null
-  find "$path" -type d -exec chmod 755 {} + 2>/dev/null
-  find "$path" -type f -exec chmod 644 {} + 2>/dev/null
+  # 775/664: grup www-data (anggota: ubuntu) bisa tulis via WinSCP/FTP
+  find "$path" -type d -exec chmod 775 {} + 2>/dev/null
+  find "$path" -type f -exec chmod 664 {} + 2>/dev/null
   echo "$(date '+%F %T') fixed: $path" >> /var/log/vipies-permd.log
 }
 
