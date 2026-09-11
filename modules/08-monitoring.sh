@@ -150,10 +150,25 @@ function sendTelegram(msg) {
   req.end();
 }
 
+function readCpu() {
+  const s = fs.readFileSync('/proc/stat', 'utf8').split('\n')[0];
+  const v = s.split(/\s+/).slice(1).map(Number);
+  const idle = v[3] + (v[4] || 0); // idle + iowait
+  const total = v.reduce((a, b) => a + b, 0);
+  return { idle, total };
+}
+
 function getStats() {
   const totalMem = os.totalmem();
   const freeMem = os.freemem();
   const memPct = (((totalMem - freeMem) / totalMem) * 100).toFixed(1);
+
+  // CPU idle: delta 2 sampel 200ms
+  const c1 = readCpu();
+  const start = Date.now();
+  while (Date.now() - start < 200) { /* spin */ }
+  const c2 = readCpu();
+  const idlePct = (((c2.idle - c1.idle) / (c2.total - c1.total)) * 100).toFixed(1);
 
   const disk = execSync("df -h / | tail -1").toString().trim().split(/\s+/);
   const diskStr = disk[2] + '/' + disk[1] + ' (' + disk[4] + ' used)';
@@ -170,7 +185,7 @@ function getStats() {
   const u = os.uptime();
   const uptime = Math.floor(u / 3600) + 'j ' + Math.floor((u % 3600) / 60) + 'm';
 
-  return { memPct: memPct, disk: diskStr, pm2Lines: pm2Lines, loadAvg: loadAvg, uptime: uptime };
+  return { memPct: memPct, idlePct: idlePct, disk: diskStr, pm2Lines: pm2Lines, loadAvg: loadAvg, uptime: uptime };
 }
 
 async function main() {
@@ -186,6 +201,7 @@ async function main() {
     lines + '\n\n' +
     '⚙️ <b>Proses PM2:</b>\n' + stats.pm2Lines + '\n\n' +
     '🧠 RAM Server: ' + stats.memPct + '%\n' +
+    '⚡ CPU Idle: ' + stats.idlePct + '%\n' +
     '💾 Disk: ' + stats.disk + '\n' +
     '📈 Load Avg: ' + stats.loadAvg + '\n' +
     '⏱ Uptime: ' + stats.uptime;
