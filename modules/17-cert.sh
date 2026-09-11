@@ -112,7 +112,10 @@ resolvectl flush-caches 2>/dev/null || true
 for CONF in /etc/nginx/sites-enabled/*; do
   [ -f "$CONF" ] || continue
   [ -L "$CONF" ] || continue
-  DOMAIN=$(basename "$CONF")
+
+  # Ambil nama domain asli dari server_name (nama file bisa beda, misal 'hrms' → hrms.seribukafetrk.com)
+  DOMAIN=$(grep -m1 'server_name' "$CONF" | tr -s ' ' | sed 's/^ *server_name //; s/;//' | awk '{print $1}')
+  [ -z "$DOMAIN" ] && continue
   # Skip non-domain: default, tanpa titik, mulai digit, backup file
   case "$DOMAIN" in default|_*|*.bak|*..*) continue ;; esac
   case "$DOMAIN" in *.*) ;; *) continue ;; esac
@@ -131,14 +134,22 @@ for CONF in /etc/nginx/sites-enabled/*; do
     if [ -n "$WWW_IP" ] && [ "$WWW_IP" = "$MYIP" ]; then
       CERT_DOMAINS=(-d "$DOMAIN" -d "www.$DOMAIN")
     fi
-    if certbot --nginx "${CERT_DOMAINS[@]}" --non-interactive --agree-tos --redirect --email "admin@$DOMAIN" 2>&1; then
-      echo "$(date '+%F %T') | ✅ Auto-cert: $DOMAIN — SSL aktif"
+    WEBROOT="/var/www/$DOMAIN"
+    [ -d "$WEBROOT" ] || continue
+    if certbot certonly --webroot -w "$WEBROOT" "${CERT_DOMAINS[@]}" --non-interactive --agree-tos --email "admin@$DOMAIN" 2>&1; then
+      # Update nginx config: tambah blok SSL jika belum ada
+      if ! grep -q "listen 443" "/etc/nginx/sites-available/$DOMAIN" 2>/dev/null && [ -f "/etc/nginx/templates/wordpress.conf" ]; then
+        sed -e "s/__DOMAIN__/$DOMAIN/g" /etc/nginx/templates/wordpress.conf > "/etc/nginx/sites-available/$DOMAIN"
+        ln -sfn "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
+      fi
       systemctl reload nginx
+      echo "$(date '+%F %T') | ✅ Auto-cert: $DOMAIN — SSL aktif"
     else
       echo "$(date '+%F %T') | ⚠️ Auto-cert: $DOMAIN — certbot gagal"
     fi
   fi
 done
+
 AUTOCERT
 chmod +x /root/auto-cert.sh
 
