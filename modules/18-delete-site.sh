@@ -53,8 +53,8 @@ echo ""
 # ---------- Baca DB creds SEBELUM hapus direktori ----------
 DBNAME=""; DBUSER=""
 if [ -f "$WEBROOT/wp-config.php" ]; then
-  DBNAME=$(grep "DB_NAME" "$WEBROOT/wp-config.php" | head -1 | cut -d"'" -f4)
-  DBUSER=$(grep "DB_USER" "$WEBROOT/wp-config.php" | head -1 | cut -d"'" -f4)
+  DBNAME=$(grep "DB_NAME" "$WEBROOT/wp-config.php" | head -1 | cut -d"'" -f4 || true)
+  DBUSER=$(grep "DB_USER" "$WEBROOT/wp-config.php" | head -1 | cut -d"'" -f4 || true)
 fi
 if [ -z "$DBNAME" ] && [ -f /root/r2-sites.conf ]; then
   CONF=$(grep "^${DOMAIN}|" /root/r2-sites.conf | head -1 | cut -d'|' -f2- || true)
