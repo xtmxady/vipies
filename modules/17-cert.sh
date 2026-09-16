@@ -141,7 +141,8 @@ for CONF in /etc/nginx/sites-enabled/*; do
     [ -d "$WEBROOT" ] || continue
     if certbot certonly --webroot -w "$WEBROOT" "${CERT_DOMAINS[@]}" --non-interactive --agree-tos --email "admin@$PRIMARY" 2>&1; then
       # Update nginx config: tambah blok SSL jika belum ada
-      if ! grep -q "listen 443" "/etc/nginx/sites-available/$PRIMARY" 2>/dev/null && [ -f "/etc/nginx/templates/wordpress.conf" ]; then
+      if ! grep -q "listen 443" "/etc/nginx/sites-available/$PRIMARY" 2>/dev/null; then
+        certbot --nginx "${CERT_DOMAINS[@]}" --non-interactive --agree-tos --redirect >/dev/null 2>&1 || \
         sed -e "s/__DOMAIN__/$PRIMARY/g" /etc/nginx/templates/wordpress.conf > "/etc/nginx/sites-available/$PRIMARY"
         ln -sfn "/etc/nginx/sites-available/$PRIMARY" "/etc/nginx/sites-enabled/$PRIMARY"
       fi
