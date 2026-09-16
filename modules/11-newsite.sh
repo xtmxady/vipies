@@ -47,10 +47,13 @@ fi
 
 # Mode WordPress
 SLUG=$(echo "$DOMAIN" | tr '.-' '__')
-DBNAME="${3:-wp_${SLUG}}"
+DBNAME="wp_${SLUG}"
+case "${3:-}" in
+  nonwww|subdomain) MODE="${3}";;
+  *)                DBNAME="${3:-wp_${SLUG}}"; MODE="${6:-}";;
+esac
 DBUSER="${4:-${SLUG}}"
 DBPASS="${5:-$(openssl rand -hex 12)}"
-MODE="${6:-}"
 
 echo "=== [1/6] Nginx config ==="
 vipies-add-site "$DOMAIN" wp "$MODE"
