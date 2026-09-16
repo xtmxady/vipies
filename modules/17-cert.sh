@@ -131,11 +131,14 @@ for CONF in /etc/nginx/sites-enabled/*; do
 
   if [ "$RESOLVED" = "$MYIP" ]; then
     echo "$(date '+%F %T') | 🔒 Auto-cert: $PRIMARY DNS OK — requesting cert..."
-    WWW_IP=$(getent ahostsv4 "www.$PRIMARY" 2>/dev/null | awk '{print $1}' | head -1) || true
-    [ -z "$WWW_IP" ] && WWW_IP=$(dig +short @1.1.1.1 "www.$PRIMARY" A 2>/dev/null | head -1) || true
     CERT_DOMAINS=(-d "$PRIMARY")
-    if [ -n "$WWW_IP" ] && [ "$WWW_IP" = "$MYIP" ]; then
-      CERT_DOMAINS=(-d "$PRIMARY" -d "www.$PRIMARY")
+    # Sertakan www HANYA kalau config nginx melayani www (server_name ada www.)
+    if grep -q "server_name.*www\.$PRIMARY" "/etc/nginx/sites-available/$PRIMARY" 2>/dev/null; then
+      WWW_IP=$(getent ahostsv4 "www.$PRIMARY" 2>/dev/null | awk '{print $1}' | head -1) || true
+      [ -z "$WWW_IP" ] && WWW_IP=$(dig +short @1.1.1.1 "www.$PRIMARY" A 2>/dev/null | head -1) || true
+      if [ -n "$WWW_IP" ] && [ "$WWW_IP" = "$MYIP" ]; then
+        CERT_DOMAINS=(-d "$PRIMARY" -d "www.$PRIMARY")
+      fi
     fi
     WEBROOT="/var/www/$PRIMARY"
     [ -d "$WEBROOT" ] || continue
