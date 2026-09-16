@@ -120,32 +120,35 @@ for CONF in /etc/nginx/sites-enabled/*; do
   case "$DOMAIN" in default|_*|*.bak|*..*) continue ;; esac
   case "$DOMAIN" in *.*) ;; *) continue ;; esac
   case "$DOMAIN" in [0-9]*|-*) continue ;; esac
-  [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ] && continue
+
+  # Normalisasi: www.domain → domain (primary cert path = non-www)
+  PRIMARY="$(echo "$DOMAIN" | sed 's/^www\.//')"
+  [ -f "/etc/letsencrypt/live/$PRIMARY/fullchain.pem" ] && continue
 
   RESOLVED=$(getent ahostsv4 "$DOMAIN" 2>/dev/null | awk '{print $1}' | head -1)
   [ -z "$RESOLVED" ] && RESOLVED=$(dig +short @1.1.1.1 "$DOMAIN" A 2>/dev/null | head -1)
   [ -z "$RESOLVED" ] && continue
 
   if [ "$RESOLVED" = "$MYIP" ]; then
-    echo "$(date '+%F %T') | 🔒 Auto-cert: $DOMAIN DNS OK — requesting cert..."
-    WWW_IP=$(getent ahostsv4 "www.$DOMAIN" 2>/dev/null | awk '{print $1}' | head -1) || true
-    [ -z "$WWW_IP" ] && WWW_IP=$(dig +short @1.1.1.1 "www.$DOMAIN" A 2>/dev/null | head -1) || true
-    CERT_DOMAINS=(-d "$DOMAIN")
+    echo "$(date '+%F %T') | 🔒 Auto-cert: $PRIMARY DNS OK — requesting cert..."
+    WWW_IP=$(getent ahostsv4 "www.$PRIMARY" 2>/dev/null | awk '{print $1}' | head -1) || true
+    [ -z "$WWW_IP" ] && WWW_IP=$(dig +short @1.1.1.1 "www.$PRIMARY" A 2>/dev/null | head -1) || true
+    CERT_DOMAINS=(-d "$PRIMARY")
     if [ -n "$WWW_IP" ] && [ "$WWW_IP" = "$MYIP" ]; then
-      CERT_DOMAINS=(-d "$DOMAIN" -d "www.$DOMAIN")
+      CERT_DOMAINS=(-d "$PRIMARY" -d "www.$PRIMARY")
     fi
-    WEBROOT="/var/www/$DOMAIN"
+    WEBROOT="/var/www/$PRIMARY"
     [ -d "$WEBROOT" ] || continue
-    if certbot certonly --webroot -w "$WEBROOT" "${CERT_DOMAINS[@]}" --non-interactive --agree-tos --email "admin@$DOMAIN" 2>&1; then
+    if certbot certonly --webroot -w "$WEBROOT" "${CERT_DOMAINS[@]}" --non-interactive --agree-tos --email "admin@$PRIMARY" 2>&1; then
       # Update nginx config: tambah blok SSL jika belum ada
-      if ! grep -q "listen 443" "/etc/nginx/sites-available/$DOMAIN" 2>/dev/null && [ -f "/etc/nginx/templates/wordpress.conf" ]; then
-        sed -e "s/__DOMAIN__/$DOMAIN/g" /etc/nginx/templates/wordpress.conf > "/etc/nginx/sites-available/$DOMAIN"
-        ln -sfn "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
+      if ! grep -q "listen 443" "/etc/nginx/sites-available/$PRIMARY" 2>/dev/null && [ -f "/etc/nginx/templates/wordpress.conf" ]; then
+        sed -e "s/__DOMAIN__/$PRIMARY/g" /etc/nginx/templates/wordpress.conf > "/etc/nginx/sites-available/$PRIMARY"
+        ln -sfn "/etc/nginx/sites-available/$PRIMARY" "/etc/nginx/sites-enabled/$PRIMARY"
       fi
       systemctl reload nginx
-      echo "$(date '+%F %T') | ✅ Auto-cert: $DOMAIN — SSL aktif"
+      echo "$(date '+%F %T') | ✅ Auto-cert: $PRIMARY — SSL aktif"
     else
-      echo "$(date '+%F %T') | ⚠️ Auto-cert: $DOMAIN — certbot gagal"
+      echo "$(date '+%F %T') | ⚠️ Auto-cert: $PRIMARY — certbot gagal"
     fi
   fi
 done
