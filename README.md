@@ -167,25 +167,26 @@ vipies-new-site example.com static    # Static
 ```bash
 # Add a new website:
 # 1) WordPress (Nginx + DB + WP core + wp-config + permissions):
-vipies-new-site example.com               # domain utama (www + non-www)
-vipies-new-site example.com wp "" "" "" nonwww  # subdomain (non-www only)
+vipies-new-site example.com wp            # www + non-www (default)
+vipies-new-site example.com wp nonwww    # non-www only / subdomain
 # 2) Static site (Nginx config only, HTML/CSS/JS):
-vipies-new-site example.com static        # domain utama
-vipies-new-site app.example.com static nonwww  # subdomain
+vipies-new-site example.com static        # www + non-www (default)
+vipies-new-site app.example.com static nonwww  # non-www only / subdomain
 
 # Manage MySQL databases
-vipies-db create mydb myuser mypass         # create DB + user
-vipies-db drop mydb                          # drop database
-vipies-db pass myuser newpass                # change user password
-vipies-db rootpass newrootpass               # change root password
+vipies-db create mydb myuser mypass        # create DB + user
+vipies-db drop mydb                        # drop database
+vipies-db pass myuser newpass              # change user password
+vipies-db rootpass newrootpass             # change root password
+
+# Fix file permissions (chown www-data + 755/644)
+sudo vipies-chown example.com
+
+# Delete a site (destructive — files + DB + nginx + SSL removed)
+vipies-delete-site example.com
 
 # Manual monitoring check
 vipies-monitor
-
-# Create a full WordPress site in one command (Nginx + DB + WP + permissions)
-vipies-new-site example.com
-# Optional: specify your own DB/user/pass
-vipies-new-site example.com wpmydb myuser mypass
 ```
 
 ## 📄 Configuration (.env)

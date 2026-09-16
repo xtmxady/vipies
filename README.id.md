@@ -172,25 +172,26 @@ vipies-new-site example.com static    # Static
 ```bash
 # Tambah situs baru:
 # 1) WordPress (Nginx + DB + WP core + wp-config + permission):
-vipies-new-site example.com               # domain utama (www + non-www)
-vipies-new-site example.com wp "" "" "" nonwww  # subdomain (non-www only)
+vipies-new-site example.com wp            # www + non-www (default)
+vipies-new-site example.com wp nonwww    # non-www only / subdomain
 # 2) Static (Nginx saja, HTML/CSS/JS):
-vipies-new-site example.com static        # domain utama
-vipies-new-site app.example.com static nonwww  # subdomain
+vipies-new-site example.com static        # www + non-www (default)
+vipies-new-site app.example.com static nonwww  # non-www only / subdomain
 
 # Kelola database MySQL
-vipies-db create mydb myuser mypass         # buat DB + user
-vipies-db drop mydb                          # hapus database
-vipies-db pass myuser newpass                # ganti password user
-vipies-db rootpass newrootpass               # ganti password root
+vipies-db create mydb myuser mypass        # buat DB + user
+vipies-db drop mydb                        # hapus database
+vipies-db pass myuser newpass              # ganti password user
+vipies-db rootpass newrootpass             # ganti password root
+
+# Fix permission file (chown www-data + 755/644)
+sudo vipies-chown example.com
+
+# Hapus situs (destruktif — file + DB + nginx + SSL dihapus)
+vipies-delete-site example.com
 
 # Cek monitoring manual
 vipies-monitor
-
-# Buat situs WordPress lengkap satu perintah (Nginx + DB + WP + permission)
-vipies-new-site example.com
-# Opsional: tentukan DB/user/pass sendiri
-vipies-new-site example.com wpmydb myuser mypass
 ```
 
 ## 📄 Konfigurasi (.env)
