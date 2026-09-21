@@ -222,6 +222,24 @@ vipies-monitor
 - fail2ban melindungi SSH & wp-login dari brute-force
 - Eksekusi PHP dikunci di folder uploads WordPress
 
+## ⚡ Performa (WP-Cron)
+
+WordPress bawaan menjalankan `wp-cron.php` SETIAP ada pengunjung — boros CPU.
+`vipies-new-site` mematikan WP-Cron internal (`DISABLE_WP_CRON=true`) dan memindahkannya
+ke cron sistem tiap 10 menit:
+
+```bash
+*/10 * * * * /usr/bin/php /var/www/<domain>/wp-cron.php >/dev/null 2>&1
+```
+
+Untuk situs yang sudah ada, terapkan manual:
+```bash
+# 1. Tambah di wp-config.php sebelum "That's all, stop editing!":
+define('DISABLE_WP_CRON', true);
+# 2. Tambah di crontab -e:
+*/10 * * * * /usr/bin/php /var/www/<domain>/wp-cron.php >/dev/null 2>&1
+```
+
 ## 🤝 Kontribusi
 
 Repo ini open-source dan dibangun untuk komunitas. Silakan:

@@ -217,6 +217,24 @@ vipies-monitor
 - fail2ban protects SSH & wp-login from brute-force
 - PHP execution locked in WordPress uploads directories
 
+## ⚡ Performance (WP-Cron)
+
+WordPress default runs `wp-cron.php` on EVERY visitor request — wasteful CPU.
+`vipies-new-site` disables internal WP-Cron (`DISABLE_WP_CRON=true`) and moves it to
+system cron every 10 minutes:
+
+```bash
+*/10 * * * * /usr/bin/php /var/www/<domain>/wp-cron.php >/dev/null 2>&1
+```
+
+For existing sites, apply manually:
+```bash
+# 1. Add to wp-config.php before "That's all, stop editing!":
+define('DISABLE_WP_CRON', true);
+# 2. Add to crontab -e:
+*/10 * * * * /usr/bin/php /var/www/<domain>/wp-cron.php >/dev/null 2>&1
+```
+
 ## 🤝 Contributing
 
 This repo is open-source and built for the community. Feel free to:

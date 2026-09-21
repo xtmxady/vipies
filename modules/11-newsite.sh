@@ -73,6 +73,15 @@ wp core download --path="$WEBROOT" --allow-root > /dev/null 2>&1 || { echo "  âœ
 echo "=== [4/6] Buat wp-config ==="
 wp config create --path="$WEBROOT" --dbname="$DBNAME" --dbuser="$DBUSER" --dbpass="$DBPASS" --allow-root > /dev/null 2>&1
 
+# Disable WP-Cron internal (hemat CPU): pindah ke system cron
+echo " * DISABLE_WP_CRON" 
+wp config set DISABLE_WP_CRON true --raw --path="$WEBROOT" --allow-root 2>/dev/null || \
+  sed -i "/That's all, stop editing/i define('DISABLE_WP_CRON', true);" "$WEBROOT/wp-config.php"
+if ! crontab -l 2>/dev/null | grep -q "/var/www/$DOMAIN/wp-cron.php"; then
+  ( crontab -l 2>/dev/null; echo "*/10 * * * * /usr/bin/php /var/www/$DOMAIN/wp-cron.php >/dev/null 2>&1" ) | crontab -
+  echo "  âœ“ System cron wp-cron: */10 menit"
+fi
+
 echo "=== [5/6] Permission www-data ==="
 chown -R www-data:www-data "$WEBROOT"
 find "$WEBROOT" -type d -exec chmod 755 {} +
