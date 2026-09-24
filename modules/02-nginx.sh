@@ -149,7 +149,7 @@ ok "Socket PHP-FPM template: $PHP_SOCK"
 mkdir -p /etc/nginx/snippets
 cat > /etc/nginx/snippets/block-ai-bots.conf <<'SNIP'
 # Blokir bot AI crawler (training AI) - Googlebot/bingbot/Semrush TIDAK diblokir
-if ($http_user_agent ~* "(GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-Web|anthropic-ai|Amazonbot|Bytespider|CCBot|PerplexityBot|Applebot-Extended|meta-externalagent|AI2Bot|Diffbot|Google-Extended|cohere-ai|ImagesiftBot|FriendlyCrawler)") {
+if ($http_user_agent ~* "(GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-Web|anthropic-ai|Amazonbot|Bytespider|CCBot|PerplexityBot|Applebot-Extended|meta-externalagent|AI2Bot|Diffbot|Google-Extended|cohere-ai|ImagesiftBot|FriendlyCrawler|ExaSearchBot|exa\.ai|Reflectionbot|jscrawler)") {
     return 403;
 }
 SNIP
