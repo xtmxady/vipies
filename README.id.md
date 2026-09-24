@@ -171,12 +171,15 @@ vipies-new-site example.com static    # Static
 
 ```bash
 # Tambah situs baru:
-# 1) WordPress (Nginx + DB + WP core + wp-config + permission):
+# 1) WordPress (Nginx + DB + WP core + wp-config + permission + proteksi WP):
 vipies-new-site example.com wp            # www + non-www (default)
 vipies-new-site example.com wp nonwww    # non-www only / subdomain
 # 2) Static (Nginx saja, HTML/CSS/JS):
 vipies-new-site example.com static        # www + non-www (default)
 vipies-new-site app.example.com static nonwww  # non-www only / subdomain
+
+# Aktifkan proteksi WP di situs yang sudah ada (idempotent):
+vipies-limit example.com                  # xmlrpc 403 + rate limit wp-login 429
 
 # Kelola database MySQL
 vipies-db create mydb myuser mypass        # buat DB + user
@@ -226,18 +229,26 @@ vipies-monitor
 
 WordPress bawaan menjalankan `wp-cron.php` SETIAP ada pengunjung — boros CPU.
 `vipies-new-site` mematikan WP-Cron internal (`DISABLE_WP_CRON=true`) dan memindahkannya
-ke cron sistem tiap 10 menit:
+ke cron sistem, **di-stagger per situs** supaya banyak situs tidak boot PHP di menit yang sama:
 
 ```bash
-*/10 * * * * /usr/bin/php /var/www/<domain>/wp-cron.php >/dev/null 2>&1
+1,11,21,31,41,51 * * * * /usr/bin/php /var/www/<situs-1>/wp-cron.php >/dev/null 2>&1
+2,12,22,32,42,52 * * * * /usr/bin/php /var/www/<situs-2>/wp-cron.php >/dev/null 2>&1
 ```
+
+`vipies-new-site` otomatis memilih slot menit yang belum terpakai (1→9). Delapan situs
+dengan `*/10` = 8 proses PHP jalan bersamaan tiap 10 menit (load spike, RAM sesak);
+stagger = satu per satu (~1–7 detik masing-masing, jeda 60 detik).
+
+> ⚠️ JANGAN pakai `1-9/10` — cron membacanya sebagai "range 1-9, step 10" = hanya menit 1,
+> dan keluar warning `Step size 10 higher than possible maximum of 8`. Pakai daftar menit eksplisit.
 
 Untuk situs yang sudah ada, terapkan manual:
 ```bash
 # 1. Tambah di wp-config.php sebelum "That's all, stop editing!":
 define('DISABLE_WP_CRON', true);
-# 2. Tambah di crontab -e:
-*/10 * * * * /usr/bin/php /var/www/<domain>/wp-cron.php >/dev/null 2>&1
+# 2. Tambah di crontab -e (pilih offset menit yang masih bebas per situs):
+1,11,21,31,41,51 * * * * /usr/bin/php /var/www/<domain>/wp-cron.php >/dev/null 2>&1
 ```
 
 ## 🤝 Kontribusi

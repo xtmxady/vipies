@@ -166,12 +166,15 @@ vipies-new-site example.com static    # Static
 
 ```bash
 # Add a new website:
-# 1) WordPress (Nginx + DB + WP core + wp-config + permissions):
+# 1) WordPress (Nginx + DB + WP core + wp-config + permissions + proteksi WP):
 vipies-new-site example.com wp            # www + non-www (default)
 vipies-new-site example.com wp nonwww    # non-www only / subdomain
 # 2) Static site (Nginx config only, HTML/CSS/JS):
 vipies-new-site example.com static        # www + non-www (default)
 vipies-new-site app.example.com static nonwww  # non-www only / subdomain
+
+# Activate WP protection on an existing site (idempotent):
+vipies-limit example.com                  # xmlrpc 403 + wp-login rate limit 429
 
 # Manage MySQL databases
 vipies-db create mydb myuser mypass        # create DB + user
@@ -221,18 +224,26 @@ vipies-monitor
 
 WordPress default runs `wp-cron.php` on EVERY visitor request — wasteful CPU.
 `vipies-new-site` disables internal WP-Cron (`DISABLE_WP_CRON=true`) and moves it to
-system cron every 10 minutes:
+system cron, **staggered per site** so multiple sites never boot PHP at the same minute:
 
 ```bash
-*/10 * * * * /usr/bin/php /var/www/<domain>/wp-cron.php >/dev/null 2>&1
+1,11,21,31,41,51 * * * * /usr/bin/php /var/www/<site-1>/wp-cron.php >/dev/null 2>&1
+2,12,22,32,42,52 * * * * /usr/bin/php /var/www/<site-2>/wp-cron.php >/dev/null 2>&1
 ```
+
+`vipies-new-site` picks the first unused minute slot automatically (1→9). Eight sites
+on `*/10` = 8 PHP processes spawning together every 10 min (load spikes, RAM squeeze);
+staggered = one at a time (~1–7 s each, 60 s apart).
+
+> ⚠️ Do NOT use `1-9/10` — cron reads it as "range 1-9, step 10" = minute 1 only, and
+> warns `Step size 10 higher than possible maximum of 8`. Use an explicit minute list.
 
 For existing sites, apply manually:
 ```bash
 # 1. Add to wp-config.php before "That's all, stop editing!":
 define('DISABLE_WP_CRON', true);
-# 2. Add to crontab -e:
-*/10 * * * * /usr/bin/php /var/www/<domain>/wp-cron.php >/dev/null 2>&1
+# 2. Add to crontab -e (pick a free minute offset per site):
+1,11,21,31,41,51 * * * * /usr/bin/php /var/www/<domain>/wp-cron.php >/dev/null 2>&1
 ```
 
 ## 🤝 Contributing

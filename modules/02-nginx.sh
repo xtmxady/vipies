@@ -19,23 +19,35 @@ mkdir -p /etc/nginx/templates
 cat > /etc/nginx/templates/wordpress.conf <<'TMPL'
 # vipies template — WordPress site
 # Nama file: /etc/nginx/sites-available/<domain>
+# Struktur: satu blok server. Saat belum ada cert → HTTP-only (blok 443 dihapus dari output).
+# Certbot --nginx menambah blok 443 + redirect ke blok serve yang benar (tanpa duplikat redirect).
 server {
     listen 80;
-    server_name __DOMAIN__ www.__DOMAIN__;
-    return 301 https://www.__DOMAIN__$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name www.__DOMAIN__;
-
-    ssl_certificate     /etc/letsencrypt/live/__DOMAIN__/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/__DOMAIN__/privkey.pem;
-
+    server_name __DOMAIN__;
     root /var/www/__DOMAIN__;
     index index.php index.html;
 
     client_max_body_size 128M;
+
+    # Let's Encrypt challenge — harus serve file, bukan ke WP
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/__DOMAIN__;
+        default_type text/plain;
+    }
+
+    # Proteksi WP: xmlrpc 403 (DDoS amplification + brute force). REST API tetap jalan.
+    location = /xmlrpc.php { return 403; }
+
+    # Proteksi WP: rate limit wp-login (zone=wp-login didefinisikan di nginx.conf)
+    location = /wp-login.php {
+        limit_req zone=wp-login burst=5 nodelay;
+        limit_req_status 429;
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/run/php/__PHP_SOCK__;
+    }
+
+    # Blokir bot AI crawler (Googlebot/bingbot/Semrush tetap dilayani)
+    include snippets/block-ai-bots.conf;
 
     location / {
         try_files $uri $uri/ /index.php?$args;
@@ -93,27 +105,24 @@ server {
 TMPL
 
 cat > /etc/nginx/templates/static.conf <<'TMPL'
-# vipies template — Static site (HTML/CSS/JS saja, tanpa backend)
+# vipies template — Static site (HTML/CSS/JS)
 # Nama file: /etc/nginx/sites-available/<domain>
+# Struktur: satu blok server. HTTP-only saat belum ada cert,
+# certbot menambah 443 + redirect.
 server {
     listen 80;
-    server_name __DOMAIN__ www.__DOMAIN__;
-    return 301 https://www.__DOMAIN__$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name www.__DOMAIN__;
-
-    ssl_certificate     /etc/letsencrypt/live/__DOMAIN__/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/__DOMAIN__/privkey.pem;
-
+    server_name __DOMAIN__;
     root /var/www/__DOMAIN__;
     index index.html;
 
     client_max_body_size 128M;
 
-    # Static murni — tanpa proxy backend
+    # Let's Encrypt challenge — serve file langsung
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/__DOMAIN__;
+        default_type text/plain;
+    }
+
     location / {
         try_files $uri $uri.html $uri/ =404;
     }
@@ -135,6 +144,24 @@ if [ "$PHP_SOCK" = "php8.3-fpm.sock" ] && ! ls /run/php/php*-fpm.sock >/dev/null
 fi
 sed -i "s/__PHP_SOCK__/$PHP_SOCK/g" /etc/nginx/templates/wordpress.conf
 ok "Socket PHP-FPM template: $PHP_SOCK"
+
+# --- Snippet: blokir bot AI crawler (Googlebot/bingbot/Semrush tetap dilayani) ---
+mkdir -p /etc/nginx/snippets
+cat > /etc/nginx/snippets/block-ai-bots.conf <<'SNIP'
+# Blokir bot AI crawler (training AI) - Googlebot/bingbot/Semrush TIDAK diblokir
+if ($http_user_agent ~* "(GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-Web|anthropic-ai|Amazonbot|Bytespider|CCBot|PerplexityBot|Applebot-Extended|meta-externalagent|AI2Bot|Diffbot|Google-Extended|cohere-ai|ImagesiftBot|FriendlyCrawler)") {
+    return 403;
+}
+SNIP
+ok "Snippet block-ai-bots.conf terpasang"
+
+# --- zone rate-limit wp-login (dipakai template WordPress) ---
+if ! grep -q "limit_req_zone.*wp-login" /etc/nginx/nginx.conf; then
+  sed -i '/^http {/a\    limit_req_zone $remote_addr zone=wp-login:10m rate=1r/s;' /etc/nginx/nginx.conf
+  ok "limit_req_zone wp-login ditambahkan ke nginx.conf"
+else
+  ok "limit_req_zone wp-login sudah ada"
+fi
 
 # --- Helper: vipies-add-site ---
 cat > /usr/local/bin/vipies-add-site <<'HELPER'
