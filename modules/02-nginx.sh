@@ -155,6 +155,28 @@ if ($http_user_agent ~* "(GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-Web
 SNIP
 ok "Snippet block-ai-bots.conf terpasang"
 
+# --- Snippet: Cloudflare real IP ---
+# WAJIB ada real_ip_header. Tanpa itu $remote_addr = IP Cloudflare sehingga
+# limit_req_zone wp-login (per-IP) tidak pernah kena dan log tidak bisa dipakai
+# identifikasi penyerang. Bug nyata 2026-09-26 di /etc/nginx/snippets/cloudflare-realip.conf.
+CF_RANGES="173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22"
+if [ ! -f /etc/nginx/snippets/cloudflare-realip.conf ] || ! grep -q "real_ip_header" /etc/nginx/snippets/cloudflare-realip.conf; then
+  { echo "# Cloudflare real IP - agar \$remote_addr = IP asli penyerang"
+    for r in $CF_RANGES; do echo "set_real_ip_from $r;"; done
+    echo "real_ip_header CF-Connecting-IP;"
+    echo "real_ip_recursive on;"
+  } > /etc/nginx/snippets/cloudflare-realip.conf
+  ok "Snippet cloudflare-realip.conf diperbaiki (real_ip_header ditambahkan)"
+else
+  ok "Snippet cloudflare-realip.conf sudah benar"
+fi
+# snippet ini harus di-include di dalam http block
+if ! grep -q "cloudflare-realip" /etc/nginx/nginx.conf; then
+  sed -i '/^http {/a\    include /etc/nginx/snippets/cloudflare-realip.conf;' /etc/nginx/nginx.conf
+  ok "include cloudflare-realip.conf ditambahkan ke nginx.conf"
+fi
+echo "  → jalankan 'nginx -t && systemctl reload nginx' setelah modul ini"
+
 # --- zone rate-limit wp-login (dipakai template WordPress) ---
 if ! grep -q "limit_req_zone.*wp-login" /etc/nginx/nginx.conf; then
   sed -i '/^http {/a\    limit_req_zone $remote_addr zone=wp-login:10m rate=1r/s;' /etc/nginx/nginx.conf
