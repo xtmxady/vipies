@@ -26,9 +26,18 @@ TG_TOKEN="${TG_BOT_TOKEN:-}"
 TG_CHAT="${TG_CHAT_ID:-}"
 
 DATE=$(date +%F)
-DAY_OF_MONTH=$(date +%d)
+DAY_OF_MONTH=$(date +%-d)
 TMPDIR="/tmp/r2backup"
 mkdir -p "$TMPDIR"
+
+# PENTING: bersihkan temp kalau script mati/dibatalkan di tengah jalan.
+# Tanpa trap ini, zip 6 GB yatim tinggal di /tmp (pernah terjadi 2026-09-20,
+# disk naik ke 88% karena file tidak terhapus setelah proses mati).
+# Pola file mengandung tanggal hari ini, jadi zip dari run lain tidak ikut terhapus.
+cleanup_tmp() {
+  find "$TMPDIR" -maxdepth 1 -type f \( -name "*-${DATE}.zip" -o -name "*-${DATE}.sql.gz" \) -delete 2>/dev/null || true
+}
+trap cleanup_tmp EXIT INT TERM
 
 notify() {
   local msg="$1"
@@ -39,6 +48,16 @@ notify() {
 
 count_files() { # <subdir> <pattern>
   rclone lsf "${R2}/${SITE}/$1" --include "$2" --files-only 2>/dev/null | wc -l
+}
+
+# Upload satu file. Return 1 kalau GAGAL (jangan sampai set -e membatalkan
+# seluruh backup karena satu situs gagal — situs berikutnya harus tetap dicoba).
+upload() { # <local> <remote>
+  if rclone copyto "$1" "$2" >> "$LOG" 2>&1; then
+    return 0
+  fi
+  echo "===== $(date '+%F %T') UPLOAD GAGAL: $1 -> $2 =====" >> "$LOG"
+  return 1
 }
 
 # Resolve DB creds: prioritas .env di /var/www/<site>/server/, lalu conf
@@ -78,9 +97,12 @@ backup_db() {
     rm -f "$TMPDIR/${db}-${DATE}.sql.gz"
     return
   fi
-  rclone copyto "$TMPDIR/${db}-${DATE}.sql.gz" "${R2}/${SITE}/db/${db}-${DATE}.sql.gz" >> "$LOG" 2>&1
-  local n=$(count_files "db" "${db}-*.sql.gz")
-  echo "$(date '+%F %T') |    ✅ DB \`${db}-${DATE}.sql.gz\` (ke-$n/5)" >> "$REPORT"
+  if upload "$TMPDIR/${db}-${DATE}.sql.gz" "${R2}/${SITE}/db/${db}-${DATE}.sql.gz"; then
+    local n=$(count_files "db" "${db}-*.sql.gz")
+    echo "$(date '+%F %T') |    ✅ DB \`${db}-${DATE}.sql.gz\` (ke-$n/5)" >> "$REPORT"
+  else
+    echo "$(date '+%F %T') |    ❌ DB \`${db}-${DATE}.sql.gz\` GAGAL upload" >> "$REPORT"
+  fi
   rm -f "$TMPDIR/${db}-${DATE}.sql.gz"
   rclone delete "${R2}/${SITE}/db" --min-age "$((DB_RETENTION_DAYS+1))d" >> "$LOG" 2>&1 || true
 }
@@ -94,9 +116,12 @@ backup_wpcontent() {
          "maintenance/*" "wflogs/*" "jetpack-waf/*" "imunify-security/*" \
          "updraft/*" "speedycache-config/*" "advanced-cache.php" "maintenance.php" "mysqlmon.sh" 2>/dev/null || true )
   if [ -s "$ZIP" ]; then
-    rclone copyto "$ZIP" "${R2}/${SITE}/files/${SITE}-wpcontent-${DATE}.zip" >> "$LOG" 2>&1
-    local n=$(count_files "files" "${SITE}-wpcontent-*.zip")
-    echo "$(date '+%F %T') |    ✅ WPContent \`${SITE}-wpcontent-${DATE}.zip\` (ke-$n/4)" >> "$REPORT"
+    if upload "$ZIP" "${R2}/${SITE}/files/${SITE}-wpcontent-${DATE}.zip"; then
+      local n=$(count_files "files" "${SITE}-wpcontent-*.zip")
+      echo "$(date '+%F %T') |    ✅ WPContent \`${SITE}-wpcontent-${DATE}.zip\` (ke-$n/4)" >> "$REPORT"
+    else
+      echo "$(date '+%F %T') |    ❌ WPContent \`${SITE}-wpcontent-${DATE}.zip\` GAGAL upload" >> "$REPORT"
+    fi
     rm -f "$ZIP"
     rclone delete "${R2}/${SITE}/files" --include "${SITE}-wpcontent-*.zip" --min-age "${CODE_RETENTION_DAYS}d" >> "$LOG" 2>&1 || true
   else
@@ -111,9 +136,12 @@ backup_custom() {
   local ZIP="$TMPDIR/${SITE}-${DATE}.zip"
   ( cd "$WEBROOT" && zip -rq "$ZIP" . -x "*/node_modules/*" "*/cache/*" 2>/dev/null || true )
   if [ -s "$ZIP" ]; then
-    rclone copyto "$ZIP" "${R2}/${SITE}/files/${SITE}-${DATE}.zip" >> "$LOG" 2>&1
-    local n=$(count_files "files" "${SITE}-*.zip")
-    echo "$(date '+%F %T') |    ✅ Folder \`${SITE}-${DATE}.zip\` (ke-$n/4)" >> "$REPORT"
+    if upload "$ZIP" "${R2}/${SITE}/files/${SITE}-${DATE}.zip"; then
+      local n=$(count_files "files" "${SITE}-*.zip")
+      echo "$(date '+%F %T') |    ✅ Folder \`${SITE}-${DATE}.zip\` (ke-$n/4)" >> "$REPORT"
+    else
+      echo "$(date '+%F %T') |    ❌ Folder \`${SITE}-${DATE}.zip\` GAGAL upload" >> "$REPORT"
+    fi
     rclone delete "${R2}/${SITE}/files" --include "${SITE}-*.zip" --min-age "${CODE_RETENTION_DAYS}d" >> "$LOG" 2>&1 || true
   else
     echo "$(date '+%F %T') |    ⚠️ folder zip kosong/gagal" >> "$REPORT"
@@ -138,7 +166,7 @@ for webdir in /var/www/*/; do
   if [ -f "$webdir/wp-config.php" ] || [ -d "$webdir/wp-content" ]; then
     echo "   _(WordPress)_" >> "$REPORT"
     backup_db "$site" "$dbinfo"
-    if (( DAY_OF_MONTH % 2 == 0 )); then
+    if (( 10#$DAY_OF_MONTH % 2 == 0 )); then
       backup_wpcontent "$site" "$webdir"
     else
       echo "$(date '+%F %T') |    wp-content: skip (hari ganjil)" >> "$REPORT"
@@ -146,7 +174,7 @@ for webdir in /var/www/*/; do
   else
     echo "   _(Custom site)_" >> "$REPORT"
     backup_db "$site" "$dbinfo"
-    if (( DAY_OF_MONTH % 2 == 0 )); then
+    if (( 10#$DAY_OF_MONTH % 2 == 0 )); then
       backup_custom "$site" "$webdir"
     else
       echo "$(date '+%F %T') |    folder: skip (hari ganjil)" >> "$REPORT"
@@ -155,11 +183,23 @@ for webdir in /var/www/*/; do
 done
 
 echo "" >> "$REPORT"
-echo "✅ **Backup ${DATE} selesai**" >> "$REPORT"
+if grep -q '❌' "$REPORT"; then
+  echo "⚠️ **Backup ${DATE} selesai DENGAN GAGAL**" >> "$REPORT"
+else
+  echo "✅ **Backup ${DATE} selesai**" >> "$REPORT"
+fi
 
-# Kirim report ke Telegram (Kirim dalam beberapa pesan bila panjang)
-# Kirim utuh via text file
-curl -s -o /dev/null "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
-  -d "chat_id=${TG_CHAT}" --data-urlencode "text@${REPORT}" 2>/dev/null || true
+# Kirim report ke Telegram. Telegram limit 4096 karakter per pesan — potong kalau perlu
+# (report 16 situs sudah ~2900 char, akan lewat kalau site bertambah).
+send_report() { # <file> <offset> <len>
+  curl -s -o /dev/null -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+    -d "chat_id=${TG_CHAT}" --data-urlencode "text=$(head -c "$3" "$1" | tail -c +"$2")" 2>/dev/null || true
+}
+if [ "$(wc -m < "$REPORT")" -gt 4000 ]; then
+  send_report "$REPORT" 1 3900
+  send_report "$REPORT" 3901 2000
+else
+  send_report "$REPORT" 1 4096
+fi
 
 echo "===== Done $(date +%T) =====" >> "$LOG"
