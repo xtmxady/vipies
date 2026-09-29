@@ -46,8 +46,12 @@ server {
         fastcgi_pass unix:/run/php/__PHP_SOCK__;
     }
 
-    # Blokir bot AI crawler (Googlebot/bingbot/Semrush tetap dilayani)
+    # Blokir bot AI crawler + bot SEO (Googlebot/bingbot/Hetrix/user asli tetap dilayani)
     include snippets/block-ai-bots.conf;
+    # Bot SEO per-network (UA mereka dipalsukan jadi Android/Chrome)
+    include snippets/block-bot-ips.conf;
+    # Scanner dotfile /.git /.env → 404 tanpa boot PHP
+    include snippets/block-scanners.conf;
 
     location / {
         try_files $uri $uri/ /index.php?$args;
@@ -145,15 +149,58 @@ fi
 sed -i "s/__PHP_SOCK__/$PHP_SOCK/g" /etc/nginx/templates/wordpress.conf
 ok "Socket PHP-FPM template: $PHP_SOCK"
 
-# --- Snippet: blokir bot AI crawler (Googlebot/bingbot/Semrush tetap dilayani) ---
+# --- Snippet: blokir bot AI crawler + bot SEO bermasalah ---
+# Googlebot/bingbot/PetalBot/HetrixTools/user asli TIDAK diblokir.
+# Ahrefs/Semrush/SERanking diblok 2026-09-29: botnet dengan rotasi 20+ IP
+# (load 8, 3.500 timeout). UA TIDAK cukup — mereka menyamar jadi Android/Chrome,
+# jadi perlu juga block-bot-ips.conf (per-network).
 mkdir -p /etc/nginx/snippets
 cat > /etc/nginx/snippets/block-ai-bots.conf <<'SNIP'
-# Blokir bot AI crawler (training AI) - Googlebot/bingbot/Semrush TIDAK diblokir
-if ($http_user_agent ~* "(GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-Web|anthropic-ai|Amazonbot|Bytespider|CCBot|PerplexityBot|Applebot-Extended|meta-externalagent|AI2Bot|Diffbot|Google-Extended|cohere-ai|ImagesiftBot|FriendlyCrawler|ExaSearchBot|exa\.ai|Reflectionbot|jscrawler)") {
+# Blokir bot AI crawler (training AI) + bot SEO bermasalah
+# TIDAK diblokir: Googlebot, bingbot, PetalBot, HetrixTools, user asli
+# Bot SEO diblok 2026-09-29: Ahrefs botnet (rotasi 20+ IP, 1234 timeout, load 8.28)
+if ($http_user_agent ~* "(GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-Web|anthropic-ai|Amazonbot|Bytespider|CCBot|PerplexityBot|Applebot-Extended|meta-externalagent|AI2Bot|Diffbot|Google-Extended|cohere-ai|ImagesiftBot|FriendlyCrawler|ExaSearchBot|exa\.ai|Reflectionbot|jscrawler|AhrefsBot|AhrefsSiteAudit|SemrushBot|SERankingBacklinksBot)") {
     return 403;
 }
 SNIP
 ok "Snippet block-ai-bots.conf terpasang"
+
+# --- Snippet: bot SEO per-network (UA tidak cukup, mereka spoof) ---
+# DIVERIFIKASI lewat ipinfo.io → AS140577 Ahrefs / AS209366 Semrush.
+# JANGAN tambah 47.128.x / 52.167.x / 40.77.x / 195.234.109.x (AWS/Azure/Automattic = user sah).
+cat > /etc/nginx/snippets/block-bot-ips.conf <<'SNIP'
+# Bot SEO dengan rotasi IP + UA dipalsukan (ditemukan 2026-09-29).
+# UA tidak cukup: Ahrefs menarodiri jadi "Mozilla/5.0 (Linux; Android 13)"
+# sehingga lolos filter User-Agent. Perlu blokir per-network.
+# DIVERIFIKASI lewat ipinfo.io (AS140577 Ahrefs / AS209366 Semrush).
+#
+# PENTING: dipisah dari block-ai-bots.conf (itu UA-based) supaya mudah
+# dinonaktifkan kalau sewaktu-waktu Ahrefs/Semrush dibutuhkan lagi.
+
+# --- Ahrefs: 168.100.149.0/24 (249 IP unik dalam 8k request) ---
+deny 168.100.149.0/24;
+
+# --- Semrush ---
+deny 185.191.171.0/24;
+deny 85.208.96.0/24;
+SNIP
+ok "Snippet block-bot-ips.conf terpasang"
+
+# --- Snippet: scanner dotfile -> 404 tanpa boot PHP ---
+# Tanpa ini: /.git/config, /.env, /.aws/credentials jatuh ke try_files
+# → /index.php → WordPress boot penuh + MySQL → 504 saat worker jenuh.
+# .well-known dikecualikan (dipakai acme-challenge + certbot).
+cat > /etc/nginx/snippets/block-scanners.conf <<'SNIP'
+# Scanner path → 404 instan, TANPA boot PHP.
+# Tanpa ini: /.git/config.save, /.env, /.aws/credentials dll jatuh ke
+# try_files → /index.php → WordPress boot penuh → 504 saat worker jenuh.
+# .well-known dikecualikan (dipakai acme-challenge + certbot).
+location ~ /\.(?!well-known) {
+    access_log off;
+    return 404;
+}
+SNIP
+ok "Snippet block-scanners.conf terpasang"
 
 # --- Snippet: Cloudflare real IP ---
 # WAJIB ada real_ip_header. Tanpa itu $remote_addr = IP Cloudflare sehingga
