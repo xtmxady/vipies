@@ -158,6 +158,15 @@ for webdir in /var/www/*/; do
   site=$(basename "$webdir"); site=${site%/}
   [ "$site" = "adminer" ] && continue
   [ "$site" = "html" ] && continue
+
+  # Skip folder kosong (mis. teststatis.com = 4 KB sisa).
+  # zip tanpa file = "Nothing to do!" lalu gagal tulis = "No space left on device"
+  # padahal disk masih 14 GB kosong. Noise yang menyesatkan.
+  if [ -z "$(ls -A "$webdir" 2>/dev/null)" ]; then
+    echo "$(date '+%F %T') | ⏭️ ${site}: folder kosong, skip" >> "$LOG"
+    continue
+  fi
+
   echo "" >> "$REPORT"
   echo "**📁 ${site}**" >> "$REPORT"
 
