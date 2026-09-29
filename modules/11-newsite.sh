@@ -78,20 +78,23 @@ echo " * DISABLE_WP_CRON"
 wp config set DISABLE_WP_CRON true --raw --path="$WEBROOT" --allow-root 2>/dev/null || \
   sed -i "/That's all, stop editing/i define('DISABLE_WP_CRON', true);" "$WEBROOT/wp-config.php"
 
-# Stagger jadwal wp-cron: cari slot menit yang belum dipakai situs lain.
-# Semua situs di menit sama = 8 proses PHP boot serentak tiap 10 menit (load spike).
-# Pola: menit ke-N, N+10, N+20, N+30, N+40, N+50.
+# Stagger jadwal wp-cron: 1 run per JAM, menit unik per situs (slot 1-9).
+#
+# PENTING 2026-09-29: JANGAN pakai pola lama 6x/jam (OFFSET, OFFSET+10, ... +50).
+# 8 situs x 6 = 48 boot PHP/jam. Tiap boot menahan 1 slot PHP-FPM
+# selama 4-24 detik (wall clock) walau CPU-nya cuma 0,5-1,7 detik → worker
+# menumpuk → 504. Diubah ke 1x/jam (8 boot/jam, -83%).
+# Satu slot per jam juga cukup: WPFC purge cache + scheduled post tetap jalan.
 if ! crontab -l 2>/dev/null | grep -q "/var/www/$DOMAIN/wp-cron.php"; then
   OFFSET=""
   for n in $(seq 1 9); do
-    if ! crontab -l 2>/dev/null | grep -qE "^$n(,[0-9]+)* \* \* \* \*.*wp-cron"; then
+    if ! crontab -l 2>/dev/null | grep -qE "^$n \* \* \* \* .*wp-cron"; then
       OFFSET="$n"; break
     fi
   done
-  [ -z "$OFFSET" ] && OFFSET=$(( $(crontab -l 2>/dev/null | grep -c 'wp-cron.php') % 9 + 1 ))
-  MINS=$(for i in 0 1 2 3 4 5; do printf "%d," $(( (OFFSET + i*10) % 60 )); done | sed 's/,$//')
-  ( crontab -l 2>/dev/null; echo "$MINS * * * * /usr/bin/php /var/www/$DOMAIN/wp-cron.php >/dev/null 2>&1" ) | crontab -
-  echo "  ✓ System cron wp-cron: menit $MINS (stagger, bukan */10)"
+  [ -z "$OFFSET" ] && OFFSET=$(( ( $(crontab -l 2>/dev/null | grep -c 'wp-cron.php') % 9 ) + 1 ))
+  ( crontab -l 2>/dev/null; echo "$OFFSET * * * * /usr/bin/php /var/www/$DOMAIN/wp-cron.php >/dev/null 2>&1" ) | crontab -
+  echo "  ✓ System cron wp-cron: menit $OFFSET tiap jam (1x/jam, stagger)"
 fi
 
 echo "=== [5/7] Permission www-data ==="

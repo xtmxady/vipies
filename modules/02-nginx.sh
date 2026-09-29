@@ -149,42 +149,47 @@ fi
 sed -i "s/__PHP_SOCK__/$PHP_SOCK/g" /etc/nginx/templates/wordpress.conf
 ok "Socket PHP-FPM template: $PHP_SOCK"
 
-# --- Snippet: blokir bot AI crawler + bot SEO bermasalah ---
-# Googlebot/bingbot/PetalBot/HetrixTools/user asli TIDAK diblokir.
-# Ahrefs/Semrush/SERanking diblok 2026-09-29: botnet dengan rotasi 20+ IP
-# (load 8, 3.500 timeout). UA TIDAK cukup — mereka menyamar jadi Android/Chrome,
-# jadi perlu juga block-bot-ips.conf (per-network).
+# --- Snippet: blokir bot AI crawler (bot SEO TIDAK diblokir) ---
+# TIDAK diblokir: Googlebot, bingbot, PetalBot, HetrixTools, user asli
+# TIDAK diblokir: Ahrefs, Semrush, SERanking
+#   2026-09-29: sempat diblok, tapi setelah wp-cron diperbaiki (load 0.5)
+#   dampaknya kecil → dikembalikan agar monitoring backlink tetap jalan.
 mkdir -p /etc/nginx/snippets
 cat > /etc/nginx/snippets/block-ai-bots.conf <<'SNIP'
-# Blokir bot AI crawler (training AI) + bot SEO bermasalah
+# Blokir bot AI crawler (training AI)
 # TIDAK diblokir: Googlebot, bingbot, PetalBot, HetrixTools, user asli
-# Bot SEO diblok 2026-09-29: Ahrefs botnet (rotasi 20+ IP, 1234 timeout, load 8.28)
-if ($http_user_agent ~* "(GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-Web|anthropic-ai|Amazonbot|Bytespider|CCBot|PerplexityBot|Applebot-Extended|meta-externalagent|AI2Bot|Diffbot|Google-Extended|cohere-ai|ImagesiftBot|FriendlyCrawler|ExaSearchBot|exa\.ai|Reflectionbot|jscrawler|AhrefsBot|AhrefsSiteAudit|SemrushBot|SERankingBacklinksBot)") {
+# TIDAK diblokir sejak 2026-09-29: Ahrefs, Semrush, SERanking
+#   -> diuji: tidak berdampak besar setelah wp-cron diperbaiki (load 0.5).
+#   -> bot tetap boleh crawl, cron tidak lagi dipaksa 6x/jam.
+if ($http_user_agent ~* "(GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-Web|anthropic-ai|Amazonbot|Bytespider|CCBot|PerplexityBot|Applebot-Extended|meta-externalagent|AI2Bot|Diffbot|Google-Extended|cohere-ai|ImagesiftBot|FriendlyCrawler|ExaSearchBot|exa\.ai|Reflectionbot|jscrawler)") {
     return 403;
 }
 SNIP
 ok "Snippet block-ai-bots.conf terpasang"
 
-# --- Snippet: bot SEO per-network (UA tidak cukup, mereka spoof) ---
-# DIVERIFIKASI lewat ipinfo.io → AS140577 Ahrefs / AS209366 Semrush.
-# JANGAN tambah 47.128.x / 52.167.x / 40.77.x / 195.234.109.x (AWS/Azure/Automattic = user sah).
+# --- Snippet: bot SEO per-network (default NONAKTIF, comment untuk aktivasi) ---
+# 2026-09-29: Ahrefs rotasi 249 IP (168.100.149.0/24) + menyamar jadi
+# "Mozilla/5.0 (Linux; Android 13)" sehingga GAGAL di-filter User-Agent.
+# Untuk aktifkan: hapus '#' di depan 3 baris deny, lalu nginx -t && reload.
+# JANGAN tambah 47.128/52.167/40.77/195.234.109 = AWS/Azure/Automattic, user sah.
 cat > /etc/nginx/snippets/block-bot-ips.conf <<'SNIP'
-# Bot SEO dengan rotasi IP + UA dipalsukan (ditemukan 2026-09-29).
-# UA tidak cukup: Ahrefs menarodiri jadi "Mozilla/5.0 (Linux; Android 13)"
-# sehingga lolos filter User-Agent. Perlu blokir per-network.
-# DIVERIFIKASI lewat ipinfo.io (AS140577 Ahrefs / AS209366 Semrush).
+# Bot SEO per-network — DINONAKTIFKAN 2026-09-29 (user: "biarkan Semrush & Ahrefs")
 #
-# PENTING: dipisah dari block-ai-bots.conf (itu UA-based) supaya mudah
-# dinonaktifkan kalau sewaktu-waktu Ahrefs/Semrush dibutuhkan lagi.
-
-# --- Ahrefs: 168.100.149.0/24 (249 IP unik dalam 8k request) ---
-deny 168.100.149.0/24;
-
-# --- Semrush ---
-deny 185.191.171.0/24;
-deny 85.208.96.0/24;
+# Ketemu 2026-09-29 sore: Ahrefs rotasi 249 IP di 168.100.149.0/24 dan menyamar
+# jadi "Mozilla/5.0 (Linux; Android 13)" sehingga lolos filter User-Agent.
+# Disimpan (tidak dihapus) supaya mudah diaktifkan lagi kalau perlu.
+#
+# CARA AKTIFKAN LAGI: hapus "#" di depan 3 baris "deny" di bawah, lalu
+#   nginx -t && systemctl reload nginx
+#
+# JANGAN menambah 47.128.x / 52.167.x / 40.77.x / 195.234.109.x
+#   -> itu AWS / Azure / Automattic (Jetpack), user asli.
+#
+#deny 168.100.149.0/24;      # Ahrefs  (AS140577)
+#deny 185.191.171.0/24;     # Semrush (AS209366)
+#deny 85.208.96.0/24;       # Semrush (AS209366)
 SNIP
-ok "Snippet block-bot-ips.conf terpasang"
+ok "Snippet block-bot-ips.conf terpasang (default nonaktif)"
 
 # --- Snippet: scanner dotfile -> 404 tanpa boot PHP ---
 # Tanpa ini: /.git/config, /.env, /.aws/credentials jatuh ke try_files
