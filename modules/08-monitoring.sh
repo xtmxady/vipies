@@ -153,22 +153,51 @@ function sendTelegram(msg) {
 function readCpu() {
   const s = fs.readFileSync('/proc/stat', 'utf8').split('\n')[0];
   const v = s.split(/\s+/).slice(1).map(Number);
-  const idle = v[3] + (v[4] || 0); // idle + iowait
+  const user = v[0] || 0;
+  const nice = v[1] || 0;
+  const system = v[2] || 0;
+  const idle = v[3] || 0;
+  const iowait = v[4] || 0;
+  const irq = v[5] || 0;
+  const softirq = v[6] || 0;
+  const steal = v[7] || 0;
   const total = v.reduce((a, b) => a + b, 0);
-  return { idle, total };
+  return { user: user + nice, system, idle: idle + iowait, steal, total };
 }
 
 function getStats() {
   const totalMem = os.totalmem();
   const freeMem = os.freemem();
-  const memPct = (((totalMem - freeMem) / totalMem) * 100).toFixed(1);
+  const usedMem = totalMem - freeMem;
+  const memPct = ((usedMem / totalMem) * 100).toFixed(1);
+  const ramStr = (usedMem / 1024 / 1024).toFixed(0) + 'MB/' + (totalMem / 1024 / 1024).toFixed(0) + 'MB (' + memPct + '%)';
 
-  // CPU idle: delta 2 sampel 200ms
+  // CPU: delta 2 sampel 200ms
   const c1 = readCpu();
   const start = Date.now();
   while (Date.now() - start < 200) { /* spin */ }
   const c2 = readCpu();
-  const idlePct = (((c2.idle - c1.idle) / (c2.total - c1.total)) * 100).toFixed(1);
+  const deltaTotal = c2.total - c1.total;
+  const idlePct = deltaTotal > 0 ? (((c2.idle - c1.idle) / deltaTotal) * 100).toFixed(1) : '0.0';
+  const userPct = deltaTotal > 0 ? (((c2.user - c1.user) / deltaTotal) * 100).toFixed(1) : '0.0';
+  const stealPct = deltaTotal > 0 ? (((c2.steal - c1.steal) / deltaTotal) * 100).toFixed(1) : '0.0';
+  const cpuStr = idlePct + '%, User ' + userPct + '%, Steal ' + stealPct + '%';
+
+  const swapInfo = (() => {
+    try {
+      const mem = fs.readFileSync('/proc/meminfo', 'utf8');
+      const t = (mem.match(/^SwapTotal:\s+(\d+)\s+kB/m) || [])[1];
+      const f = (mem.match(/^SwapFree:\s+(\d+)\s+kB/m) || [])[1];
+      if (t && f) {
+        const tt = parseInt(t, 10) * 1024;
+        const ff = parseInt(f, 10) * 1024;
+        const uu = tt - ff;
+        const pp = tt > 0 ? ((uu / tt) * 100).toFixed(1) : '0.0';
+        return (uu / 1024 / 1024).toFixed(0) + 'MB/' + (tt / 1024 / 1024).toFixed(0) + 'MB (' + pp + '%)';
+      }
+    } catch (e) {}
+    return '0MB/0MB (0%)';
+  })();
 
   const disk = execSync("df -h / | tail -1").toString().trim().split(/\s+/);
   const diskStr = disk[2] + '/' + disk[1] + ' (' + disk[4] + ' used)';
@@ -185,7 +214,7 @@ function getStats() {
   const u = os.uptime();
   const uptime = Math.floor(u / 3600) + 'j ' + Math.floor((u % 3600) / 60) + 'm';
 
-  return { memPct: memPct, idlePct: idlePct, disk: diskStr, pm2Lines: pm2Lines, loadAvg: loadAvg, uptime: uptime };
+  return { ramStr, swapStr: swapInfo, cpuStr, disk: diskStr, pm2Lines, loadAvg, uptime };
 }
 
 async function main() {
@@ -200,8 +229,9 @@ async function main() {
   const msg = '📊 <b>Monitor VPS</b>\n\n' +
     lines + '\n\n' +
     '⚙️ <b>Proses PM2:</b>\n' + stats.pm2Lines + '\n\n' +
-    '🧠 RAM Server: ' + stats.memPct + '%\n' +
-    '⚡ CPU Idle: ' + stats.idlePct + '%\n' +
+    '🧠 RAM Server: ' + stats.ramStr + '\n' +
+    '💾 SWAP Server: ' + stats.swapStr + '\n' +
+    '⚡ CPU Idle: ' + stats.cpuStr + '\n' +
     '💾 Disk: ' + stats.disk + '\n' +
     '📈 Load Avg: ' + stats.loadAvg + '\n' +
     '⏱ Uptime: ' + stats.uptime;
