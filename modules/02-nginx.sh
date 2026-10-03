@@ -302,6 +302,132 @@ chmod +x /usr/local/bin/vipies-add-site
 # alias template: wp -> wordpress.conf (kinerja helper: vipies-add-site <d> wp)
 ln -sf wordpress.conf /etc/nginx/templates/wp.conf
 
+# Helper vipies-canonical-www (otomatis pisahkan blok 443 non-www -> 301 https://www.<domain>)
+step "Memasang helper 'vipies-canonical-www'..."
+cat > /usr/local/bin/vipies-canonical-www <<'CANONICAL'
+#!/usr/bin/env python3
+"""
+vipies-canonical-www <domain>
+Otomatis pisahkan blok non-www 443 -> 301 https://www.<domain> setelah SSL aktif.
+Hanya berlaku untuk domain yang melayani www di Nginx.
+"""
+import sys, os, re, subprocess
+
+if len(sys.argv) < 2:
+    sys.exit(0)
+
+domain = sys.argv[1].strip()
+conf_path = f"/etc/nginx/sites-available/{domain}"
+if not os.path.isfile(conf_path):
+    alt_files = [f for f in os.listdir("/etc/nginx/sites-available") if domain in f]
+    if alt_files:
+        conf_path = f"/etc/nginx/sites-available/{alt_files[0]}"
+    else:
+        sys.exit(0)
+
+with open(conf_path, "r") as f:
+    content = f.read()
+
+# Cek apakah domain ini memang serve www dan sudah punya SSL (listen 443)
+if f"www.{domain}" not in content or "listen 443" not in content:
+    sys.exit(0)
+
+# Cek jika sudah terpasang redirect 443 non-www
+if re.search(rf'server_name\s+{re.escape(domain)};', content) and re.search(rf'return 301 https://www\.{re.escape(domain)}', content):
+    sys.exit(0)
+
+# Parse semua blok server
+blocks = []
+i = 0
+while i < len(content):
+    m = re.search(r'\bserver\s*\{', content[i:])
+    if not m:
+        break
+    start = i + m.start()
+    depth = 0
+    j = start
+    end = -1
+    while j < len(content):
+        if content[j] == '{': depth += 1
+        elif content[j] == '}':
+            depth -= 1
+            if depth == 0:
+                end = j + 1
+                break
+        j += 1
+    if end != -1:
+        blocks.append(content[start:end])
+        i = end
+    else:
+        break
+
+serve_443_block = None
+for b in blocks:
+    if ('listen 443' in b or 'listen [::]:443' in b or 'ssl_certificate' in b) and ('root ' in b or 'proxy_pass' in b or 'try_files' in b):
+        if not (re.search(rf'server_name\s+{re.escape(domain)};', b) and 'return 301' in b):
+            serve_443_block = b
+            break
+
+if not serve_443_block:
+    sys.exit(0)
+
+ssl_cert = re.search(r'ssl_certificate\s+[^;]+;', serve_443_block)
+ssl_key = re.search(r'ssl_certificate_key\s+[^;]+;', serve_443_block)
+ssl_opts = re.search(r'include\s+/etc/letsencrypt/options-ssl-nginx\.conf;', serve_443_block)
+ssl_dh = re.search(r'ssl_dhparam\s+[^;]+;', serve_443_block)
+
+ssl_lines = []
+if ssl_cert: ssl_lines.append("    " + ssl_cert.group(0))
+if ssl_key: ssl_lines.append("    " + ssl_key.group(0))
+if ssl_opts: ssl_lines.append("    " + ssl_opts.group(0))
+if ssl_dh: ssl_lines.append("    " + ssl_dh.group(0))
+ssl_str = "\n".join(ssl_lines)
+
+block_80 = f"""server {{
+    listen 80;
+    server_name www.{domain} {domain};
+    return 301 https://www.{domain}$request_uri;
+}}"""
+
+block_443_redirect = f"""# Redirect non-www HTTPS -> www HTTPS (canonical www)
+server {{
+    listen 443 ssl;
+    server_name {domain};
+{ssl_str}
+
+    return 301 https://www.{domain}$request_uri;
+}}"""
+
+cleaned_serve_443 = serve_443_block
+cleaned_serve_443 = re.sub(rf'server_name\s+www\.{re.escape(domain)}\s+{re.escape(domain)};', f'server_name www.{domain};', cleaned_serve_443)
+cleaned_serve_443 = re.sub(rf'server_name\s+{re.escape(domain)}\s+www\.{re.escape(domain)};', f'server_name www.{domain};', cleaned_serve_443)
+
+new_content = f"{block_80}\n\n{block_443_redirect}\n\n{cleaned_serve_443}\n"
+
+backup_path = f"/tmp/{domain}.pre-canonical"
+with open(backup_path, "w") as f:
+    f.write(content)
+
+with open(conf_path, "w") as f:
+    f.write(new_content)
+
+test = subprocess.run(["nginx", "-t"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+if test.returncode == 0:
+    print(f"  ✓ Canonical www otomatis diterapkan untuk {domain}")
+    if os.path.exists(backup_path):
+        os.remove(backup_path)
+else:
+    print(f"  ⚠ Nginx test gagal untuk {domain}, rollback...")
+    with open(backup_path, "r") as f:
+        orig = f.read()
+    with open(conf_path, "w") as f:
+        f.write(orig)
+    if os.path.exists(backup_path):
+        os.remove(backup_path)
+
+CANONICAL
+chmod +x /usr/local/bin/vipies-canonical-www
+
 step "Membuat placeholder.png (fallback gambar rusak)..."
 mkdir -p /var/www/global-assets
 printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n\x2d\xb4\x00\x00\x00\x00IEND\xaeB\x60\x82' > /var/www/global-assets/placeholder.png

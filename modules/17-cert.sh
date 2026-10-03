@@ -78,7 +78,10 @@ else
 fi
 echo "  → Request cert via certbot..."
 if certbot --nginx "${CERT_DOMAINS[@]}" --non-interactive --agree-tos --redirect --email "admin@$DOMAIN"; then
-  # Certbot --nginx otomatis ubah config: tambah blok 443 + redirect.
+  # Terapkan canonical www otomatis jika mode domain utama (www)
+  if [ -x /usr/local/bin/vipies-canonical-www ]; then
+    /usr/local/bin/vipies-canonical-www "$DOMAIN" || true
+  fi
   systemctl reload nginx
   echo ""
   echo "✅ SSL aktif: https://$DOMAIN"
@@ -148,6 +151,10 @@ for CONF in /etc/nginx/sites-enabled/*; do
         certbot --nginx "${CERT_DOMAINS[@]}" --non-interactive --agree-tos --redirect >/dev/null 2>&1 || \
         sed -e "s/__DOMAIN__/$PRIMARY/g" /etc/nginx/templates/wordpress.conf > "/etc/nginx/sites-available/$PRIMARY"
         ln -sfn "/etc/nginx/sites-available/$PRIMARY" "/etc/nginx/sites-enabled/$PRIMARY"
+      fi
+      # Terapkan canonical www otomatis jika mode domain utama (www)
+      if [ -x /usr/local/bin/vipies-canonical-www ]; then
+        /usr/local/bin/vipies-canonical-www "$PRIMARY" || true
       fi
       systemctl reload nginx
       echo "$(date '+%F %T') | ✅ Auto-cert: $PRIMARY — SSL aktif"
