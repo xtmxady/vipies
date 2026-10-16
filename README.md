@@ -76,7 +76,7 @@ sudo bash setup.sh
 | 05-mysql | MySQL install + root password + `/root/.my.cnf` |
 | 06-wpcli | WP-CLI + Certbot (snap) — *slowest module (snap download)* |
 | 07-backup | rclone + R2 remote (auto-configured from .env) + backup cron |
-| 08-monitoring | Monitor script + cron every 30 min + `/etc/vipies.conf` |
+| 08-monitoring | Monitor script + cron every 10 min + `/etc/vipies.conf` |
 | 09-autorestart | systemd Restart=always (nginx/mysql/php) |
 | 10-permission | inotify daemon auto chown/chmod on uploads |
 | 11-newsite | Once-run WordPress site creator |

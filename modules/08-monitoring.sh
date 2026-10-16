@@ -507,15 +507,15 @@ MONJS
 chmod 755 /var/www/monitor.js
 ok "Monitor Node standalone dibuat (/var/www/monitor.js)"
 
-step "Memasang cron monitoring (tiap 30 menit)..."
+step "Memasang cron monitoring (tiap 10 menit)..."
 if ! crontab -l 2>/dev/null | grep -q 'vipies-monitor'; then
-  ( crontab -l 2>/dev/null; echo "*/30 * * * * /usr/local/bin/vipies-monitor >/dev/null 2>&1" ) | crontab -
-  ok "Cron monitoring aktif (tiap 30 menit)"
+  ( crontab -l 2>/dev/null; echo "*/10 * * * * /usr/local/bin/vipies-monitor >/dev/null 2>&1" ) | crontab -
+  ok "Cron monitoring aktif (tiap 10 menit)"
 else
   ok "Cron monitoring sudah ada"
 fi
 if ! crontab -l 2>/dev/null | grep -q '/var/www/monitor.js'; then
-  ( crontab -l 2>/dev/null; echo "*/30 * * * * node /var/www/monitor.js >> /var/log/monitor.log 2>&1" ) | crontab -
+  ( crontab -l 2>/dev/null; echo "*/10 * * * * node /var/www/monitor.js >> /var/log/monitor.log 2>&1" ) | crontab -
   ok "Cron monitor Node aktif (/var/www/monitor.js)"
 else
   ok "Cron monitor Node sudah ada"
