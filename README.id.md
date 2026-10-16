@@ -251,6 +251,26 @@ define('DISABLE_WP_CRON', true);
 1,11,21,31,41,51 * * * * /usr/bin/php /var/www/<domain>/wp-cron.php >/dev/null 2>&1
 ```
 
+## ☁️ Failover Otomatis Edge Cloudflare (Alternatif Argo Versi Free Plan)
+
+Cloudflare Argo Smart Routing ($5/bln + $0.10/GB) mengalihkan rute traffic saat transit lokal mengalami gangguan/degradasi. Namun pada multi-site atau traffic tinggi, biaya ini terus bertambah.
+
+`vipies` menyertakan failover cerdas bawaan langsung di `monitor.js`:
+- **Pemantauan Edge Otomatis:** Memeriksa status edge lokal secara berkala lewat Cloudflare Status API (`https://www.cloudflarestatus.com/api/v2/summary.json`), khususnya PoP Jakarta (CGK).
+- **Pencegahan Flapping (Hysteresis Asimetris):**
+  - **Evakuasi Cepat (Orange ➔ Grey):** Cukup **2x deteksi berturut-turut** `degraded_performance` / gangguan, sistem langsung mengubah DNS ke **DNS-Only (Grey Cloud)** mengarah langsung ke IP origin VPS. Mencegah website timeout HTTP 520, 522, dan 524.
+  - **Pemulihan Konservatif (Grey ➔ Orange):** Membutuhkan **3x deteksi berturut-turut** stabil `operational` sebelum mengembalikan DNS ke **Proxied (Orange Cloud)**. Menghindari jebakan *false recovery* dan caching error DNS TTL di perangkat pengunjung.
+- **Notifikasi Telegram Real-Time:** Peringatan otomatis dikirim ke bot Telegram saat terjadi peralihan mode (Failover / Recovery), serta indikator edge disematkan pada laporan periodik server.
+- **Tanpa Dependency Tambahan:** Murni menggunakan pustaka bawaan Node.js (`https`, `fs`, `child_process`).
+
+### Cara Mengaktifkan:
+1. Buat Cloudflare API Token dengan izin `Zone:DNS:Edit` dan `Zone:Read`.
+2. Masukkan ke `.env` (atau `/etc/vipies.conf`):
+   ```bash
+   CF_API_TOKEN=token_cloudflare_anda
+   ```
+3. Jika dikosongkan, `monitor.js` tetap berjalan normal memantau resource & website tanpa mengubah record DNS.
+
 ## 🤝 Kontribusi
 
 Repo ini open-source dan dibangun untuk komunitas. Silakan:

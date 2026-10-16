@@ -20,6 +20,7 @@ TG_CHAT_ID=${TG_CHAT_ID:-}
 R2_REMOTE_NAME=${R2_REMOTE_NAME:-r2}
 R2_BUCKET=${R2_BUCKET:-hermes}
 SITE_URL=${SITE_URL:-https://www.seribukafetrk.com}
+CF_API_TOKEN=${CF_API_TOKEN:-}
 CONF
 chmod 600 /etc/vipies.conf
 ok "/etc/vipies.conf ditulis (chmod 600)"
@@ -90,30 +91,256 @@ function readConf(key) {
   try {
     const txt = fs.readFileSync('/etc/vipies.conf', 'utf8');
     const m = txt.match(new RegExp('^' + key + '=(.*)$', 'm'));
-    return m ? m[1].trim() : '';
-  } catch (e) { return ''; }
+    if (m && m[1]) return m[1].trim();
+  } catch (e) {}
+
+  // Fallback khusus CF_API_TOKEN dari /root/.cf/cache-token jika ada
+  if (key === 'CF_API_TOKEN') {
+    try {
+      if (fs.existsSync('/root/.cf/cache-token')) {
+        return fs.readFileSync('/root/.cf/cache-token', 'utf8').trim();
+      }
+    } catch (e) {}
+  }
+
+  return '';
 }
 
 const BOT_TOKEN = readConf('TG_BOT_TOKEN');
 const CHAT_ID = readConf('TG_CHAT_ID');
+const CF_TOKEN = readConf('CF_API_TOKEN');
 
 if (!BOT_TOKEN || !CHAT_ID) {
   console.error('TG_BOT_TOKEN / TG_CHAT_ID kosong di /etc/vipies.conf');
   process.exit(1);
 }
 
+// State failover Cloudflare (hysteresis counter & last status)
+const CF_STATE_FILE = '/etc/vipies/cf_state.json';
+
+function readCfState() {
+  try {
+    if (fs.existsSync(CF_STATE_FILE)) {
+      return JSON.parse(fs.readFileSync(CF_STATE_FILE, 'utf8'));
+    }
+  } catch (e) {}
+  return {
+    last_status: 'unknown',
+    current_mode: 'unknown', // 'orange' | 'grey'
+    degraded_count: 0,
+    operational_count: 0,
+    last_action: null,
+    last_action_time: null
+  };
+}
+
+function writeCfState(state) {
+  try {
+    fs.mkdirSync('/etc/vipies', { recursive: true });
+    fs.writeFileSync(CF_STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
+  } catch (e) {
+    console.error('Gagal menulis cf_state.json:', e.message);
+  }
+}
+
+// Request helper Cloudflare API
+function cfApiRequest(path, method = 'GET', body = null) {
+  return new Promise((resolve, reject) => {
+    if (!CF_TOKEN) return resolve({ success: false, errors: ['CF_API_TOKEN not set'] });
+    const payload = body ? JSON.stringify(body) : null;
+    const req = https.request({
+      hostname: 'api.cloudflare.com',
+      path: '/client/v4' + path,
+      method: method,
+      headers: {
+        'Authorization': 'Bearer ' + CF_TOKEN,
+        'Content-Type': 'application/json',
+        'User-Agent': 'vipies-monitor/1.0',
+        ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {})
+      },
+      agent: false
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(15000, () => {
+      req.destroy();
+      reject(new Error('CF API timeout'));
+    });
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+// Cek status Cloudflare StatusPage (Jakarta CGK)
+function checkCgkStatus() {
+  return new Promise((resolve) => {
+    const req = https.request({
+      hostname: 'www.cloudflarestatus.com',
+      path: '/api/v2/summary.json',
+      method: 'GET',
+      headers: { 'User-Agent': 'vipies-monitor/1.0' },
+      agent: false
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          const cgk = json.components ? json.components.find(c => c.name && c.name.includes('Jakarta')) : null;
+          resolve(cgk ? cgk.status : 'unknown');
+        } catch (e) {
+          resolve('unknown');
+        }
+      });
+    });
+    req.on('error', () => resolve('unknown'));
+    req.setTimeout(10000, () => {
+      req.destroy();
+      resolve('unknown');
+    });
+    req.end();
+  });
+}
+
+// Dapatkan semua domain aktif yang di-host di server ini
+function getManagedDomains() {
+  try {
+    const out = execSync("grep -h 'server_name' /etc/nginx/sites-enabled/* | grep -v 'server_name _;' | tr -s ' ' | sed 's/^ *server_name //' | tr ' ' '\\n' | sort -u").toString();
+    const sites = out.split('\n').map(s => s.trim().replace(/;$/, '')).filter(s => s && s !== '_' && s !== 'example.com' && s.indexOf('#') !== 0);
+    const seen = {};
+    return sites.map(s => s.replace(/^www\./, '')).filter(s => {
+      if (seen[s]) return false;
+      seen[s] = true;
+      return true;
+    });
+  } catch (e) {
+    return [];
+  }
+}
+
+// Update DNS records Cloudflare (Orange <-> Grey)
+async function setCloudflareProxy(targetProxied) {
+  if (!CF_TOKEN) {
+    console.error('CF_API_TOKEN tidak ditemukan, lewati DNS failover.');
+    return { success: false, changed: 0, failed: 0 };
+  }
+
+  const domains = getManagedDomains();
+  let changed = 0;
+  let failed = 0;
+  const targetNames = [];
+
+  try {
+    const zonesResp = await cfApiRequest('/zones?per_page=50');
+    if (!zonesResp || !zonesResp.result) {
+      console.error('Gagal mengambil daftar zona CF:', zonesResp ? zonesResp.errors : 'null');
+      return { success: false, changed: 0, failed: 0 };
+    }
+
+    for (const zone of zonesResp.result) {
+      // Cek apakah zone ini mengelola salah satu domain/subdomain di server ini
+      const isManagedZone = domains.some(d => d === zone.name || d.endsWith('.' + zone.name));
+      if (!isManagedZone) continue;
+
+      const recsResp = await cfApiRequest('/zones/' + zone.id + '/dns_records?per_page=100');
+      if (!recsResp || !recsResp.result) continue;
+
+      for (const rec of recsResp.result) {
+        if (!['A', 'CNAME'].includes(rec.type)) continue;
+
+        // Hanya ubah record yang relevan dengan domain yang di-serve Nginx
+        const matchesDomain = domains.some(d => rec.name === d || rec.name === 'www.' + d);
+        if (!matchesDomain) continue;
+
+        if (rec.proxied !== targetProxied) {
+          try {
+            const patchResp = await cfApiRequest('/zones/' + zone.id + '/dns_records/' + rec.id, 'PATCH', {
+              proxied: targetProxied
+            });
+            if (patchResp && patchResp.success) {
+              changed++;
+              targetNames.push(rec.name);
+            } else {
+              failed++;
+            }
+          } catch (e) {
+            failed++;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Error saat proses setCloudflareProxy:', e.message);
+  }
+
+  return { success: failed === 0, changed, failed, targetNames };
+}
+
+// Logika failover otomatis dengan hysteresis
+async function evaluateCloudflareFailover() {
+  if (!CF_TOKEN) return null;
+
+  const cgkStatus = await checkCgkStatus();
+  if (cgkStatus === 'unknown') return null;
+
+  const state = readCfState();
+  let eventNotice = null;
+
+  if (cgkStatus === 'degraded_performance' || cgkStatus === 'partial_outage' || cgkStatus === 'major_outage') {
+    state.degraded_count = (state.degraded_count || 0) + 1;
+    state.operational_count = 0;
+
+    // Hysteresis: butuh 2x berturut-turut terdeteksi degraded
+    if (state.degraded_count >= 2 && state.current_mode !== 'grey') {
+      const res = await setCloudflareProxy(false);
+      state.current_mode = 'grey';
+      state.last_action = 'SWITCH_TO_GREY';
+      state.last_action_time = new Date().toISOString();
+      eventNotice = `🚨 <b>Cloudflare Failover: GREY CLOUD Aktif</b>\n` +
+        `• Status CGK (Jakarta): <code>${cgkStatus}</code> (terdeteksi ${state.degraded_count}x)\n` +
+        `• DNS diubah: <b>DNS-Only (Grey)</b> direct origin\n` +
+        `• Rekord diperbarui: ${res.changed} record (gagal: ${res.failed})\n` +
+        `• Web tetap aman dilayani langsung via Nginx origin cache.`;
+    }
+  } else if (cgkStatus === 'operational') {
+    state.operational_count = (state.operational_count || 0) + 1;
+    state.degraded_count = 0;
+
+    // Hysteresis: butuh 3x berturut-turut stabil operational
+    if (state.operational_count >= 3 && state.current_mode === 'grey') {
+      const res = await setCloudflareProxy(true);
+      state.current_mode = 'orange';
+      state.last_action = 'SWITCH_TO_ORANGE';
+      state.last_action_time = new Date().toISOString();
+      eventNotice = `✅ <b>Cloudflare Recovery: ORANGE CLOUD Aktif</b>\n` +
+        `• Status CGK (Jakarta): <code>operational</code> (stabil ${state.operational_count}x)\n` +
+        `• DNS diubah: <b>Proxied (Orange)</b> via Cloudflare CDN & WAF\n` +
+        `• Rekord diperbarui: ${res.changed} record (gagal: ${res.failed})\n` +
+        `• Edge caching dan proteksi Cloudflare kembali normal.`;
+    }
+  }
+
+  state.last_status = cgkStatus;
+  writeCfState(state);
+
+  return { cgkStatus, state, eventNotice };
+}
+
 // Daftar situs: dari SITES di conf (comma-sep), fallback auto-detect nginx sites-enabled
 function getSites() {
   const fromConf = readConf('SITES');
   if (fromConf) return fromConf.split(',').map(s => s.trim()).filter(Boolean);
-  try {
-    const out = execSync("grep -h 'server_name' /etc/nginx/sites-enabled/* | grep -v 'server_name _;' | tr -s ' ' | sed 's/^ *server_name //' | tr ' ' '\\n' | sort -u").toString();
-    var sites = out.split('\n').map(s => s.trim().replace(/;$/, '')).filter(s => s && s !== '_' && s !== 'example.com' && s.indexOf('#') !== 0);
-    // Normalize: buang www (cek bare domain), dedupe
-    var seen = {};
-    return sites.map(function(s) { return s.replace(/^www\./, ''); })
-      .filter(function(s) { if (seen[s]) return false; seen[s] = true; return true; });
-  } catch (e) { return ['seribukafetrk.com']; }
+  const sites = getManagedDomains();
+  return sites.length > 0 ? sites : ['seribukafetrk.com'];
 }
 
 function checkSite(url) {
@@ -139,15 +366,25 @@ function checkSite(url) {
 }
 
 function sendTelegram(msg) {
-  const body = JSON.stringify({ chat_id: CHAT_ID, text: msg, parse_mode: 'HTML' });
-  const req = https.request({
-    hostname: 'api.telegram.org',
-    path: '/bot' + BOT_TOKEN + '/sendMessage',
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+  return new Promise((resolve) => {
+    const body = JSON.stringify({ chat_id: CHAT_ID, text: msg, parse_mode: 'HTML' });
+    const req = https.request({
+      hostname: 'api.telegram.org',
+      path: '/bot' + BOT_TOKEN + '/sendMessage',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      agent: false
+    }, (res) => {
+      res.resume();
+      resolve();
+    });
+    req.on('error', (e) => {
+      console.error('Telegram send error:', e.message);
+      resolve();
+    });
+    req.write(body);
+    req.end();
   });
-  req.write(body);
-  req.end();
 }
 
 function readCpu() {
@@ -202,12 +439,15 @@ function getStats() {
   const disk = execSync("df -h / | tail -1").toString().trim().split(/\s+/);
   const diskStr = disk[2] + '/' + disk[1] + ' (' + disk[4] + ' used)';
 
-  const procs = JSON.parse(execSync('pm2 jlist 2>/dev/null').toString());
-  const pm2Lines = procs.map(function(p) {
-    const cpu = p.monit ? p.monit.cpu + '%' : 'N/A';
-    const mem = p.monit ? (p.monit.memory / 1024 / 1024).toFixed(1) + 'MB' : 'N/A';
-    return p.name + ': ' + p.pm2_env.status + ' (CPU ' + cpu + ', RAM ' + mem + ')';
-  }).join('\n');
+  let pm2Lines = 'N/A';
+  try {
+    const procs = JSON.parse(execSync('pm2 jlist 2>/dev/null').toString());
+    pm2Lines = procs.map(function(p) {
+      const cpu = p.monit ? p.monit.cpu + '%' : 'N/A';
+      const mem = p.monit ? (p.monit.memory / 1024 / 1024).toFixed(1) + 'MB' : 'N/A';
+      return p.name + ': ' + p.pm2_env.status + ' (CPU ' + cpu + ', RAM ' + mem + ')';
+    }).join('\n');
+  } catch (e) {}
 
   const loadAvg = os.loadavg()[0].toFixed(2);
 
@@ -218,6 +458,22 @@ function getStats() {
 }
 
 async function main() {
+  // 1. Evaluasi Failover Cloudflare (jika dikonfigurasi)
+  let cfInfoStr = '';
+  try {
+    const cfResult = await evaluateCloudflareFailover();
+    if (cfResult && cfResult.eventNotice) {
+      await sendTelegram(cfResult.eventNotice);
+    }
+    if (cfResult) {
+      const modeEmoji = cfResult.state.current_mode === 'grey' ? '☁️ (Grey/Direct)' : (cfResult.state.current_mode === 'orange' ? '🟠 (Orange/Proxied)' : '❓');
+      cfInfoStr = `\n☁️ <b>Cloudflare Edge:</b> CGK <code>${cfResult.cgkStatus}</code> | Mode: ${modeEmoji}`;
+    }
+  } catch (e) {
+    console.error('CF Failover check error:', e.message);
+  }
+
+  // 2. Cek resource & status website
   const stats = getStats();
   const sites = getSites();
   const results = await Promise.all(sites.map(checkSite));
@@ -234,13 +490,18 @@ async function main() {
     '⚡ CPU Idle: ' + stats.cpuStr + '\n' +
     '💾 Disk: ' + stats.disk + '\n' +
     '📈 Load Avg: ' + stats.loadAvg + '\n' +
-    '⏱ Uptime: ' + stats.uptime;
+    '⏱ Uptime: ' + stats.uptime +
+    cfInfoStr;
 
-  sendTelegram(msg);
+  await sendTelegram(msg);
+  process.exit(0);
 }
 
-main().catch(function(e) {
-  sendTelegram('❌ Monitor error: ' + e.message);
+main().catch(async function(e) {
+  try {
+    await sendTelegram('❌ Monitor error: ' + e.message);
+  } catch (err) {}
+  process.exit(1);
 });
 MONJS
 chmod 755 /var/www/monitor.js

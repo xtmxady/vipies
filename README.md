@@ -246,6 +246,23 @@ define('DISABLE_WP_CRON', true);
 1,11,21,31,41,51 * * * * /usr/bin/php /var/www/<domain>/wp-cron.php >/dev/null 2>&1
 ```
 
+## ☁️ Cloudflare Dynamic Edge Failover (Free Argo Alternative)
+
+Cloudflare Argo Smart Routing ($5/mo + $0.10/GB) reroutes traffic around degraded transit links dynamically, but gets expensive on multi-site or high-traffic fleets.
+
+`vipies` provides an automated edge failover built directly into `monitor.js`:
+- **Active Edge Health Check:** Polls Cloudflare Status API (`https://www.cloudflarestatus.com/api/v2/summary.json`) for local edge health (e.g. Jakarta CGK PoP).
+- **Asymmetric Flapping Prevention (Hysteresis):**
+  - **Evacuation (Orange ➔ Grey):** Fast trigger after **2 consecutive degraded checks** (switches DNS records to DNS-only / Grey Cloud pointing direct to origin). Prevents HTTP 520/522/524 timeouts.
+  - **Restoration (Grey ➔ Orange):** Conservative trigger after **3 consecutive operational checks** before reenabling Cloudflare proxy (Orange Cloud). Avoids false recovery flapping and intermediate DNS TTL caching traps.
+- **Telegram Alerting:** Instant push notifications when failover or recovery occurs, plus current edge state reporting in every periodic monitor report.
+- **Zero Extra Dependencies:** Pure Node.js standard library (`https`, `fs`, `child_process`).
+
+### Setup:
+1. Create a Cloudflare API Token with `Zone:DNS:Edit` and `Zone:Read` permissions.
+2. Add `CF_API_TOKEN=your_token_here` in `.env` (or `/etc/vipies.conf`).
+3. If left blank, `monitor.js` runs normal server monitoring without touching DNS.
+
 ## 🤝 Contributing
 
 This repo is open-source and built for the community. Feel free to:
