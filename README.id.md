@@ -264,8 +264,15 @@ Cloudflare Argo Smart Routing ($5/bln + $0.10/GB) mengalihkan rute traffic saat 
 - **Tanpa Dependency Tambahan:** Murni menggunakan pustaka bawaan Node.js (`https`, `fs`, `child_process`).
 
 ### Cara Mengaktifkan:
-1. Buat Cloudflare API Token dengan izin `Zone:DNS:Edit` dan `Zone:Read`.
-2. Masukkan ke `.env` (atau `/etc/vipies.conf`):
+1. **Buat Cloudflare API Token:**
+   - Masuk ke Cloudflare Dashboard > **My Profile** > **API Tokens** > **Create Token**.
+   - Pilih template **Create Custom Token**.
+   - Atur **Permissions**:
+     - `Zone` — `DNS` — `Edit`
+     - `Zone` — `Zone` — `Read`
+   - Atur **Zone Resources**:
+     - `Include` — `All zones from an account` (atau pilih domain spesifik).
+2. Masukkan token ke `.env` (atau `/etc/vipies.conf`):
    ```bash
    CF_API_TOKEN=token_cloudflare_anda
    ```

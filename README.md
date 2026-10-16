@@ -259,7 +259,14 @@ Cloudflare Argo Smart Routing ($5/mo + $0.10/GB) reroutes traffic around degrade
 - **Zero Extra Dependencies:** Pure Node.js standard library (`https`, `fs`, `child_process`).
 
 ### Setup:
-1. Create a Cloudflare API Token with `Zone:DNS:Edit` and `Zone:Read` permissions.
+1. **Create Cloudflare API Token:**
+   - Go to Cloudflare Dashboard > **My Profile** > **API Tokens** > **Create Token**.
+   - Select **Create Custom Token**.
+   - Configure **Permissions**:
+     - `Zone` — `DNS` — `Edit`
+     - `Zone` — `Zone` — `Read`
+   - Configure **Zone Resources**:
+     - `Include` — `All zones from an account` (or select specific domains).
 2. Add `CF_API_TOKEN=your_token_here` in `.env` (or `/etc/vipies.conf`).
 3. If left blank, `monitor.js` runs normal server monitoring without touching DNS.
 
