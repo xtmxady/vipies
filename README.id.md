@@ -187,7 +187,7 @@ vipies-db drop mydb                        # hapus database
 vipies-db pass myuser newpass              # ganti password user
 vipies-db rootpass newrootpass             # ganti password root
 
-# Fix permission file (chown www-data + 755/644)
+# Fix permission file (chown www-data, 775 dir, 664 file, wp-config 660)
 sudo vipies-chown example.com
 
 # Hapus situs (destruktif — file + DB + nginx + SSL dihapus)

@@ -93,14 +93,15 @@ if ! crontab -l 2>/dev/null | grep -q "/var/www/$DOMAIN/wp-cron.php"; then
     fi
   done
   [ -z "$OFFSET" ] && OFFSET=$(( ( $(crontab -l 2>/dev/null | grep -c 'wp-cron.php') % 9 ) + 1 ))
-  ( crontab -l 2>/dev/null; echo "$OFFSET * * * * /usr/bin/php /var/www/$DOMAIN/wp-cron.php >/dev/null 2>&1" ) | crontab -
-  echo "  ✓ System cron wp-cron: menit $OFFSET tiap jam (1x/jam, stagger)"
+  ( crontab -l 2>/dev/null; echo "$OFFSET * * * * runuser -u www-data -- /usr/bin/php /var/www/$DOMAIN/wp-cron.php >/dev/null 2>&1" ) | crontab -
+  echo "  ✓ System cron wp-cron: menit $OFFSET tiap jam (1x/jam, stagger, user www-data)"
 fi
 
 echo "=== [5/7] Permission www-data ==="
 chown -R www-data:www-data "$WEBROOT"
-find "$WEBROOT" -type d -exec chmod 755 {} +
-find "$WEBROOT" -type f -exec chmod 644 {} +
+find "$WEBROOT" -type d -exec chmod 775 {} +
+find "$WEBROOT" -type f -exec chmod 664 {} +
+[ -f "$WEBROOT/wp-config.php" ] && chmod 660 "$WEBROOT/wp-config.php"
 
 echo "=== [6/7] Tambah ke r2-sites.conf (backup) ==="
 if ! grep -q "^${DOMAIN}|" /root/r2-sites.conf 2>/dev/null; then

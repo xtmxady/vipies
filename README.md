@@ -182,7 +182,7 @@ vipies-db drop mydb                        # drop database
 vipies-db pass myuser newpass              # change user password
 vipies-db rootpass newrootpass             # change root password
 
-# Fix file permissions (chown www-data + 755/644)
+# Fix file permissions (chown www-data, 775 dir, 664 file, wp-config 660)
 sudo vipies-chown example.com
 
 # Delete a site (destructive — files + DB + nginx + SSL removed)

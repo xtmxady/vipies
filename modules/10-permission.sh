@@ -12,6 +12,51 @@ source modules/lib.sh
 step "Menginstall inotify-tools..."
 ensure inotify-tools
 
+step "Membuat helper manual (/usr/local/bin/vipies-chown)..."
+cat > /usr/local/bin/vipies-chown <<'CHOWN'
+#!/bin/bash
+# vipies-chown — chown+chmod manual per site dari migrasi/upload
+# Usage: vipies-chown <domain>
+# Contoh: vipies-chown a.com
+
+set -euo pipefail
+
+if [ $# -ne 1 ]; then
+  echo "Usage: vipies-chown <domain>"
+  echo "Contoh: vipies-chown a.com"
+  exit 1
+fi
+
+SITE="/var/www/$1"
+if [ ! -d "$SITE" ]; then
+  echo "ERROR: $SITE tidak ditemukan"
+  exit 1
+fi
+
+echo "⏳ Fixing $SITE..."
+chown -R www-data:www-data "$SITE"
+find "$SITE" -type d -exec chmod 775 {} +
+find "$SITE" -type f -exec chmod 664 {} +
+
+# Hardening wp-config.php (hanya www-data dan grup yang boleh baca/tulis)
+if [ -f "$SITE/wp-config.php" ]; then
+  chmod 660 "$SITE/wp-config.php"
+fi
+
+# Kembalikan permission eksekusi untuk skrip shell dan CLI
+find "$SITE" -type f -name "*.sh" -exec chmod 775 {} + 2>/dev/null || true
+if [ -d "$SITE/node_modules/.bin" ]; then
+  chmod -R 775 "$SITE/node_modules/.bin" 2>/dev/null || true
+fi
+
+echo "✅ Done: $SITE (chown www-data, dir 775, file 664, wp-config 660)"
+CHOWN
+chmod +x /usr/local/bin/vipies-chown
+
+step "Memasang sudoers untuk vipies-chown..."
+echo "ubuntu ALL=(root) NOPASSWD: /usr/local/bin/vipies-chown" > /etc/sudoers.d/vipies-chown
+chmod 440 /etc/sudoers.d/vipies-chown
+
 step "Membuat daemon auto-fix permission (/usr/local/bin/vipies-permd.sh)..."
 cat > /usr/local/bin/vipies-permd.sh <<'PERM'
 #!/bin/bash
