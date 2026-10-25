@@ -48,6 +48,21 @@ restore "nginx/snippets" "/etc/nginx"
 
 # ---------- LetsEncrypt certs ----------
 restore "letsencrypt" "/etc"
+if [ -d "/etc/letsencrypt/live" ]; then
+  for ldir in /etc/letsencrypt/live/*/; do
+    [ -d "$ldir" ] || continue
+    dname=$(basename "$ldir")
+    for f in cert chain fullchain privkey; do
+      if [ -f "$ldir/${f}.pem" ] && [ ! -L "$ldir/${f}.pem" ]; then
+        target_name=$(ls -1 "/etc/letsencrypt/archive/$dname/${f}"*.pem 2>/dev/null | sort -V | tail -1 | xargs -r basename)
+        if [ -n "$target_name" ]; then
+          ln -sf "../../archive/$dname/$target_name" "$ldir/${f}.pem"
+          echo "   ✔ fix symlink ${dname}/${f}.pem → archive" | tee -a "$LOG"
+        fi
+      fi
+    done
+  done
+fi
 
 # ---------- cron ----------
 [ -f "$STAGE/crontab.txt" ] && { crontab "$STAGE/crontab.txt" 2>/dev/null; echo "   ✔ crontab" | tee -a "$LOG"; }

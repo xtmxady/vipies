@@ -97,7 +97,7 @@ backup() {
   # migrate-restore.sh (self-contained)
   [ -f "$HOME/migrate-restore.sh" ] && cp -a "$HOME/migrate-restore.sh" "$STAGE/migrate-restore.sh"
 
-  cd "$STAGE" && zip -rq "$ZIP" . 2>/dev/null
+  cd "$STAGE" && zip -ryq "$ZIP" . 2>/dev/null
   rclone copyto "$ZIP" "${R2}/migrate-config-${STAMP}.zip" >> "$LOG" 2>&1
   log "Migrate config ${STAMP} ($(du -h "$ZIP" | cut -f1)) terupload"
   rm -f "$ZIP"
